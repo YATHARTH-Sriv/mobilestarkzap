@@ -1,0 +1,86 @@
+# ----------------------
+# Dependencies
+# ----------------------
+node_modules/
+
+# ----------------------
+# Expo
+# ----------------------
+.expo/
+.expo-shared/
+web-build/
+
+# ----------------------
+# React Native
+# ----------------------
+android/
+ios/
+
+# If you are using Expo managed workflow, keep these ignored.
+# If you eject (bare workflow), REMOVE android/ and ios/ from ignore.
+
+# ----------------------
+# Logs
+# ----------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ----------------------
+# Environment variables
+# ----------------------
+.env
+.env.*
+!.env.example
+
+# ----------------------
+# Build / cache
+# ----------------------
+dist/
+build/
+.cache/
+.expo/web/cache/
+
+# ----------------------
+# OS files
+# ----------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------
+# IDE / Editor
+# ----------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ----------------------
+# TypeScript
+# ----------------------
+*.tsbuildinfo
+
+# ----------------------
+# Metro bundler cache
+# ----------------------
+.metro-cache/
+
+# ----------------------
+# Expo dev files
+# ----------------------
+*.expo.*
+
+# ----------------------
+# Testing
+# ----------------------
+coverage/
+
+# ----------------------
+# Misc
+# ----------------------
+*.pem
+*.p12
+*.key
