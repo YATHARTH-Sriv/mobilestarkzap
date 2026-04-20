@@ -210,6 +210,7 @@ const styles = StyleSheet.create({
   ctaSlot: {
     width: "100%",
     gap: 8,
+    marginBottom: 80,
   },
   statusText: {
     color: ONBOARDING_COLORS.textSecondary,

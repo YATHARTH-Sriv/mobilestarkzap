@@ -42,6 +42,8 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 24,
     paddingBottom: 20,
+    marginBottom: 60,
+    zIndex: 3,
   },
   corner: {
     position: "absolute",

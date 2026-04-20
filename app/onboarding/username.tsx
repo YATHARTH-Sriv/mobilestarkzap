@@ -3,11 +3,14 @@ import { usePrivy } from "@privy-io/expo";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
+    TouchableWithoutFeedback,
     View,
     useWindowDimensions,
 } from "react-native";
@@ -101,69 +104,79 @@ export default function UsernameScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardAvoiding}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <OnboardingFrame
-        footer={
-          <OnboardingCta
-            label="Go Ahead"
-            onPress={submitUsername}
-            disabled={submitting}
-            variant="green"
-          />
-        }
+    <OnboardingFrame>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
       >
-        <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
-          <View
-            style={[
-              styles.stepBadge,
-              compactWidth ? styles.stepBadgeCompact : undefined,
-            ]}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+            showsVerticalScrollIndicator={false}
           >
-            <Text
-              style={[
-                styles.stepText,
-                compactWidth ? styles.stepTextCompact : undefined,
-              ]}
-            >
-              Step 1/2
-            </Text>
-          </View>
-          <Text style={[styles.title, { fontSize: titleSize }]}>
-            Set Username
-          </Text>
+            <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
+              <View
+                style={[
+                  styles.stepBadge,
+                  compactWidth ? styles.stepBadgeCompact : undefined,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.stepText,
+                    compactWidth ? styles.stepTextCompact : undefined,
+                  ]}
+                >
+                  Step 1/2
+                </Text>
+              </View>
+              <Text style={[styles.title, { fontSize: titleSize }]}>
+                Set Username
+              </Text>
 
-          <View style={[styles.inputWrap, { minHeight: fieldMinHeight }]}>
-            <Ionicons
-              name="person-outline"
-              size={compactWidth ? 24 : 26}
-              color="#8a8d93"
-            />
-            <TextInput
-              value={username}
-              onChangeText={setUsername}
-              placeholder="JohnCena"
-              placeholderTextColor="#92959b"
-              style={[
-                styles.input,
-                compactWidth ? styles.inputCompact : undefined,
-              ]}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                void submitUsername();
-              }}
-            />
-          </View>
+              <View style={[styles.inputWrap, { minHeight: fieldMinHeight }]}>
+                <Ionicons
+                  name="person-outline"
+                  size={compactWidth ? 24 : 26}
+                  color="#8a8d93"
+                />
+                <TextInput
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="JohnCena"
+                  placeholderTextColor="#92959b"
+                  style={[
+                    styles.input,
+                    compactWidth ? styles.inputCompact : undefined,
+                  ]}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    void submitUsername();
+                  }}
+                />
+              </View>
 
-          {status ? <Text style={styles.statusText}>{status}</Text> : null}
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        </View>
-      </OnboardingFrame>
-    </KeyboardAvoidingView>
+              {status ? <Text style={styles.statusText}>{status}</Text> : null}
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            </View>
+
+            <View style={styles.ctaContainer}>
+              <OnboardingCta
+                label="Go Ahead"
+                onPress={submitUsername}
+                disabled={submitting}
+                variant="green"
+              />
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </OnboardingFrame>
   );
 }
 
@@ -171,11 +184,19 @@ const styles = StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+  },
   centeredContent: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 26,
+  },
+  ctaContainer: {
+    paddingHorizontal: 0,
+    paddingBottom: 80,
+    paddingTop: 24,
   },
   stepBadge: {
     minHeight: 50,

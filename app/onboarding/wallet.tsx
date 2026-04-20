@@ -23,31 +23,10 @@ import {
     fundMyWalletForOnboarding,
     prepareMyWalletForOnboarding,
     type ProfileMeResponse,
-    type WalletFundingState,
     type WalletOnboardingStateResponse,
 } from "@/lib/profile";
 
-function fundingStatusLabel(
-  status: WalletFundingState["status"] | undefined,
-): string {
-  if (status === "funded") {
-    return "Funded";
-  }
 
-  if (status === "pending") {
-    return "Funding Pending";
-  }
-
-  if (status === "failed") {
-    return "Funding Failed";
-  }
-
-  if (status === "disabled") {
-    return "Manual Funding";
-  }
-
-  return "Ready to Fund";
-}
 
 export default function WalletStepScreen() {
   const { user, getAccessToken } = usePrivy();
@@ -293,16 +272,7 @@ export default function WalletStepScreen() {
   const actionBusy = loadingWallet || deployBusy || fundingBusy;
 
   return (
-    <OnboardingFrame
-      footer={
-        <OnboardingCta
-          label={ctaLabel}
-          onPress={handlePrimaryAction}
-          disabled={actionBusy}
-          variant="green"
-        />
-      }
-    >
+    <OnboardingFrame>
       <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
         <View
           style={[
@@ -349,32 +319,20 @@ export default function WalletStepScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.fundingCard}>
-          <View style={styles.fundingRow}>
-            <Text style={styles.fundingLabel}>Grant</Text>
-            <Text style={styles.fundingValue}>
-              {funding?.amountStrk ?? "10"} STRK
-            </Text>
-          </View>
-          <View style={styles.fundingRow}>
-            <Text style={styles.fundingLabel}>Balance</Text>
-            <Text style={styles.fundingValue}>
-              {funding ? `${funding.currentBalanceStrk} STRK` : "--"}
-            </Text>
-          </View>
-          <View style={styles.fundingRow}>
-            <Text style={styles.fundingLabel}>Status</Text>
-            <Text style={styles.fundingValue}>
-              {fundingStatusLabel(funding?.status)}
-            </Text>
-          </View>
-        </View>
-
         {status ? <Text style={styles.statusText}>{status}</Text> : null}
         {funding?.error ? (
           <Text style={styles.errorText}>{funding.error}</Text>
         ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      </View>
+
+      <View style={styles.ctaContainer}>
+        <OnboardingCta
+          label={ctaLabel}
+          onPress={handlePrimaryAction}
+          disabled={actionBusy}
+          variant="green"
+        />
       </View>
     </OnboardingFrame>
   );
@@ -386,6 +344,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 26,
+  },
+  ctaContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 80,
   },
   stepBadge: {
     minHeight: 50,
@@ -447,31 +409,6 @@ const styles = StyleSheet.create({
   copyButtonDisabled: {
     opacity: 0.45,
   },
-  fundingCard: {
-    width: "100%",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#d8dde3",
-    backgroundColor: "#eef3f8",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 8,
-  },
-  fundingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  fundingLabel: {
-    color: "#5c6270",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  fundingValue: {
-    color: "#1d232e",
-    fontSize: 13,
-    fontWeight: "700",
-  },
   statusText: {
     color: ONBOARDING_COLORS.textSecondary,
     fontSize: 13,
@@ -483,3 +420,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
