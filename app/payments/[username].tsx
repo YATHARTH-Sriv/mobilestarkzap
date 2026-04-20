@@ -27,17 +27,43 @@ import {
     type DirectPaymentHistoryItem,
 } from "@/lib/payments";
 
-function formatClock(iso: string): string {
+function formatPaymentDateTime(iso: string): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.valueOf())) {
     return "--:--";
   }
 
-  return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const date = parsed.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
+  const clock = parsed.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return `${date} • ${clock}`;
 }
 
 function looksLikeWalletAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{10,}$/.test(value);
+}
+
+function formatCounterparty(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "Unknown";
+  }
+
+  if (trimmed.startsWith("@")) {
+    return trimmed;
+  }
+
+  if (looksLikeWalletAddress(trimmed) || trimmed.includes("...")) {
+    return trimmed;
+  }
+
+  return `@${trimmed}`;
 }
 
 export default function PaymentHistoryScreen() {
@@ -195,31 +221,90 @@ export default function PaymentHistoryScreen() {
               const counterpartyIsExternal = mine
                 ? item.recipientPrivyUserId === null
                 : false;
-
-              const cardTitle = mine
-                ? `Payment to ${title.replace("@", "")}`
-                : `Payment to you`;
+              const counterparty = mine
+                ? formatCounterparty(item.recipientUsername)
+                : formatCounterparty(item.senderUsername);
+              const cardTitle = mine ? "You sent" : "You received";
+              const amountLabel = `${mine ? "-" : "+"}${item.amountUnit} ${item.tokenSymbol}`;
 
               return (
-                <View key={item.id} style={styles.transactionCard}>
-                  <Text style={styles.transactionCardTitle}>{cardTitle}</Text>
+                <View
+                  key={item.id}
+                  style={[
+                    styles.transactionCard,
+                    mine
+                      ? styles.transactionCardOutgoing
+                      : styles.transactionCardIncoming,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.transactionCardTitle,
+                      mine
+                        ? styles.transactionCardTitleOutgoing
+                        : styles.transactionCardTitleIncoming,
+                    ]}
+                  >
+                    {cardTitle}
+                  </Text>
 
-                  <Text style={styles.transactionCardAmount}>
-                    {item.amountUnit} {item.tokenSymbol}
+                  <Text
+                    style={[
+                      styles.transactionCardAmount,
+                      mine
+                        ? styles.transactionCardAmountOutgoing
+                        : styles.transactionCardAmountIncoming,
+                    ]}
+                  >
+                    {amountLabel}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.transactionCardCounterparty,
+                      mine
+                        ? styles.transactionCardCounterpartyOutgoing
+                        : styles.transactionCardCounterpartyIncoming,
+                    ]}
+                  >
+                    {mine ? `To ${counterparty}` : `From ${counterparty}`}
                   </Text>
 
                   <View style={styles.transactionCardFooter}>
                     <Ionicons
-                      name="checkmark-circle"
+                      name={mine ? "arrow-up-circle" : "arrow-down-circle"}
                       size={ms(16)}
-                      color="#0fa866"
+                      color={mine ? "#ffb27b" : "#0fa866"}
                     />
-                    <Text style={styles.transactionCardDate}>
-                      Paid • {formatClock(item.createdAt)}
+                    <Text
+                      style={[
+                        styles.transactionCardDate,
+                        mine
+                          ? styles.transactionCardDateOutgoing
+                          : styles.transactionCardDateIncoming,
+                      ]}
+                    >
+                      {formatPaymentDateTime(item.createdAt)}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.transactionDirectionBadge,
+                        mine
+                          ? styles.transactionDirectionBadgeOutgoing
+                          : styles.transactionDirectionBadgeIncoming,
+                      ]}
+                    >
+                      {mine ? "Sent" : "Received"}
                     </Text>
 
                     {counterpartyIsExternal ? (
-                      <Text style={styles.transactionCardExternalBadge}>
+                      <Text
+                        style={[
+                          styles.transactionCardExternalBadge,
+                          styles.transactionCardExternalBadgeOutgoing,
+                        ]}
+                      >
                         External
                       </Text>
                     ) : null}
@@ -340,7 +425,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   transactionCard: {
-    backgroundColor: "#2a2d35",
     borderRadius: wp(20),
     padding: wp(20),
     elevation: 2,
@@ -349,18 +433,47 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
+  transactionCardOutgoing: {
+    backgroundColor: "#2a2d35",
+  },
+  transactionCardIncoming: {
+    backgroundColor: "#edf8f0",
+    borderWidth: 1,
+    borderColor: "#d6ebdd",
+  },
   transactionCardTitle: {
     fontSize: ms(15),
-    color: "rgba(255,255,255,0.70)",
     fontFamily: "Inter_500Medium",
     marginBottom: hp(4),
+  },
+  transactionCardTitleOutgoing: {
+    color: "rgba(255,255,255,0.70)",
+  },
+  transactionCardTitleIncoming: {
+    color: "#3c6b4a",
   },
   transactionCardAmount: {
     fontSize: ms(36),
     fontFamily: "Inter_600SemiBold",
-    color: "#ffffff",
     letterSpacing: -0.5,
-    marginBottom: hp(14),
+    marginBottom: hp(8),
+  },
+  transactionCardAmountOutgoing: {
+    color: "#ffffff",
+  },
+  transactionCardAmountIncoming: {
+    color: "#0b9a43",
+  },
+  transactionCardCounterparty: {
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(14),
+    marginBottom: hp(12),
+  },
+  transactionCardCounterpartyOutgoing: {
+    color: "rgba(255,255,255,0.84)",
+  },
+  transactionCardCounterpartyIncoming: {
+    color: "#486a53",
   },
   transactionCardFooter: {
     flexDirection: "row",
@@ -369,18 +482,40 @@ const styles = StyleSheet.create({
   },
   transactionCardDate: {
     fontSize: ms(13),
-    color: "rgba(255,255,255,0.55)",
     fontFamily: "Inter_500Medium",
   },
-  transactionCardExternalBadge: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.70)",
+  transactionCardDateOutgoing: {
+    color: "rgba(255,255,255,0.55)",
+  },
+  transactionCardDateIncoming: {
+    color: "#60786a",
+  },
+  transactionDirectionBadge: {
     fontSize: ms(11),
     fontFamily: "Inter_600SemiBold",
     paddingHorizontal: wp(8),
     paddingVertical: hp(3),
     borderRadius: wp(8),
     marginLeft: "auto",
+  },
+  transactionDirectionBadgeOutgoing: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.70)",
+  },
+  transactionDirectionBadgeIncoming: {
+    backgroundColor: "#cde9d7",
+    color: "#2c6a43",
+  },
+  transactionCardExternalBadge: {
+    fontSize: ms(11),
+    fontFamily: "Inter_600SemiBold",
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(3),
+    borderRadius: wp(8),
+  },
+  transactionCardExternalBadgeOutgoing: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.70)",
   },
   composerWrap: {
     flexDirection: "row",

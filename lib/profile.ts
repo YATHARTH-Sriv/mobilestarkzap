@@ -1,10 +1,10 @@
-import { API_BASE_URL } from '@/lib/config';
-import { readErrorMessage } from '@/lib/http';
+import { API_BASE_URL } from "@/lib/config";
+import { readErrorMessage } from "@/lib/http";
 
 export type AppUserProfile = {
   privyUserId: string;
   username: string | null;
-  onboardingStep: 'welcome' | 'username' | 'wallet' | 'done';
+  onboardingStep: "welcome" | "username" | "wallet" | "done";
   onboardingCompleted: boolean;
   onboardingCompletedAt: string | null;
   createdAt: string;
@@ -20,6 +20,55 @@ export type ProfileWallet = {
 export type ProfileMeResponse = {
   profile: AppUserProfile | null;
   wallet: ProfileWallet;
+};
+
+export type WalletDeployment = {
+  ready: boolean;
+  mode?: "user_pays" | "sponsored";
+  chainId?: "SN_MAIN" | "SN_SEPOLIA";
+  message?: string;
+  hint?: string;
+};
+
+export type WalletFundingStatus =
+  | "disabled"
+  | "ready_to_fund"
+  | "pending"
+  | "funded"
+  | "failed";
+
+export type WalletFundingState = {
+  enabled: boolean;
+  configured: boolean;
+  status: WalletFundingStatus;
+  amountStrk: string;
+  amountRaw: string;
+  tokenAddress: string;
+  currentBalanceStrk: string;
+  currentBalanceRaw: string;
+  canDeploy: boolean;
+  txHash: string | null;
+  explorerUrl: string | null;
+  error: string | null;
+};
+
+export type WalletOnboardingStateResponse = {
+  wallet: NonNullable<ProfileWallet>;
+  deployment?: WalletDeployment;
+  funding?: WalletFundingState;
+};
+
+export type WalletFundingTransaction = {
+  txHash: string;
+  explorerUrl: string;
+  executionMode: "v3_default" | "v3_boosted_bounds";
+};
+
+export type FundWalletOnboardingResponse = {
+  wallet: NonNullable<ProfileWallet>;
+  funding: WalletFundingState;
+  transaction?: WalletFundingTransaction;
+  message?: string;
 };
 
 export type PredictionBalanceResponse = {
@@ -42,7 +91,7 @@ export type PredictionBalanceResponse = {
 export type UserTransactionActivity = {
   id: string;
   action: string;
-  status: 'success' | 'failed';
+  status: "success" | "failed";
   txHash: string | null;
   explorerUrl: string | null;
   details: string | null;
@@ -59,7 +108,7 @@ async function buildAuthHeaders(
   getAccessToken: (() => Promise<string | null>) | undefined,
 ): Promise<HeadersInit> {
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   };
 
   if (!getAccessToken) {
@@ -93,7 +142,7 @@ export async function setMyUsername(
   username: string,
 ): Promise<ProfileMeResponse> {
   const response = await fetch(`${API_BASE_URL}/api/profile/username`, {
-    method: 'POST',
+    method: "POST",
     headers: await buildAuthHeaders(getAccessToken),
     body: JSON.stringify({ username }),
   });
@@ -112,10 +161,13 @@ export async function setMyUsername(
 export async function completeMyOnboarding(
   getAccessToken: () => Promise<string | null>,
 ): Promise<ProfileMeResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/profile/onboarding/complete`, {
-    method: 'POST',
-    headers: await buildAuthHeaders(getAccessToken),
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/profile/onboarding/complete`,
+    {
+      method: "POST",
+      headers: await buildAuthHeaders(getAccessToken),
+    },
+  );
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
@@ -124,16 +176,75 @@ export async function completeMyOnboarding(
   return (await response.json()) as ProfileMeResponse;
 }
 
+export async function prepareMyWalletForOnboarding(
+  getAccessToken: () => Promise<string | null>,
+): Promise<WalletOnboardingStateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/wallet/starknet`, {
+    method: "POST",
+    headers: await buildAuthHeaders(getAccessToken),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return (await response.json()) as WalletOnboardingStateResponse;
+}
+
+export async function fetchMyWalletOnboardingState(
+  getAccessToken: () => Promise<string | null>,
+): Promise<WalletOnboardingStateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/wallet/onboarding-state`, {
+    headers: await buildAuthHeaders(getAccessToken),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return (await response.json()) as WalletOnboardingStateResponse;
+}
+
+export async function fundMyWalletForOnboarding(
+  getAccessToken: () => Promise<string | null>,
+): Promise<FundWalletOnboardingResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/wallet/fund-onboarding`, {
+    method: "POST",
+    headers: await buildAuthHeaders(getAccessToken),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return (await response.json()) as FundWalletOnboardingResponse;
+}
+
+export async function deployMyWallet(
+  getAccessToken: () => Promise<string | null>,
+): Promise<WalletOnboardingStateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/wallet/deploy`, {
+    method: "POST",
+    headers: await buildAuthHeaders(getAccessToken),
+  });
+
+  if (!response.ok && response.status !== 409) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return (await response.json()) as WalletOnboardingStateResponse;
+}
+
 export async function connectRealtimeSocket(
   getAccessToken: () => Promise<string | null>,
   wsBaseUrl: string,
 ): Promise<WebSocket> {
   const token = await getAccessToken();
   if (!token) {
-    throw new Error('Missing access token for realtime connection');
+    throw new Error("Missing access token for realtime connection");
   }
 
-  const separator = wsBaseUrl.includes('?') ? '&' : '?';
+  const separator = wsBaseUrl.includes("?") ? "&" : "?";
   const socketUrl = `${wsBaseUrl}${separator}token=${encodeURIComponent(token)}`;
   return new WebSocket(socketUrl);
 }
@@ -156,9 +267,12 @@ export async function fetchMyTransactions(
   getAccessToken: () => Promise<string | null>,
   limit = 12,
 ): Promise<ProfileTransactionsResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/profile/transactions?limit=${limit}`, {
-    headers: await buildAuthHeaders(getAccessToken),
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/profile/transactions?limit=${limit}`,
+    {
+      headers: await buildAuthHeaders(getAccessToken),
+    },
+  );
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
@@ -168,7 +282,7 @@ export async function fetchMyTransactions(
 }
 
 export function formatWeiToStrk(wei: string): string {
-  const parsed = BigInt(wei || '0');
+  const parsed = BigInt(wei || "0");
   const whole = parsed / 10n ** 18n;
   const fraction = parsed % 10n ** 18n;
 
@@ -176,8 +290,12 @@ export function formatWeiToStrk(wei: string): string {
     return `${whole.toString()} STRK`;
   }
 
-  const fractionText = fraction.toString().padStart(18, '0').slice(0, 4).replace(/0+$/, '');
-  return `${whole.toString()}.${fractionText || '0'} STRK`;
+  const fractionText = fraction
+    .toString()
+    .padStart(18, "0")
+    .slice(0, 4)
+    .replace(/0+$/, "");
+  return `${whole.toString()}.${fractionText || "0"} STRK`;
 }
 
 export function formatTimeAgo(iso: string): string {

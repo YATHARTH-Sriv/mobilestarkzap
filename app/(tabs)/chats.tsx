@@ -807,6 +807,11 @@ export default function ChatsScreen() {
   }, [connectSocket, disconnectSocket]);
 
   useEffect(() => {
+    claimedMarketIdsRef.current = new Set();
+    setActiveMarkets([]);
+  }, [user?.id]);
+
+  useEffect(() => {
     if (!activeRoom) {
       return;
     }
@@ -1570,6 +1575,12 @@ export default function ChatsScreen() {
                           : market.winningOutcome
                             ? "YES"
                             : "NO"}
+                      </Text>
+                    ) : null}
+                    {market.resolved ? (
+                      <Text style={styles.claimHintText}>
+                        Claims are per account. Each winning wallet must claim
+                        separately.
                       </Text>
                     ) : null}
                     {market.hasPlacedBet ? (
@@ -2362,6 +2373,12 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     fontSize: ms(12),
     fontWeight: "500",
+  },
+  claimHintText: {
+    color: "#7c8ea6",
+    fontSize: ms(11),
+    fontWeight: "500",
+    marginTop: hp(4),
   },
   placedBetBadge: {
     color: "#854d0e",

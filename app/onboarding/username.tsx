@@ -1,19 +1,27 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { usePrivy } from '@privy-io/expo';
+import { Ionicons } from "@expo/vector-icons";
+import { usePrivy } from "@privy-io/expo";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import {
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
+} from "react-native";
 
-import { OnboardingFrame } from '@/components/onboarding-frame';
-import { OnboardingCta } from '@/components/onboarding-cta';
-import { fetchMyProfile, setMyUsername } from '@/lib/profile';
-import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';
+import { OnboardingCta } from "@/components/onboarding-cta";
+import { OnboardingFrame } from "@/components/onboarding-frame";
+import { ONBOARDING_COLORS } from "@/lib/onboarding-theme";
+import { fetchMyProfile, setMyUsername } from "@/lib/profile";
 
 export default function UsernameScreen() {
   const { user, getAccessToken } = usePrivy();
   const { width, height } = useWindowDimensions();
-  const [username, setUsername] = useState('');
-  const [status, setStatus] = useState('');
+  const [username, setUsername] = useState("");
+  const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,7 +36,7 @@ export default function UsernameScreen() {
 
     async function bootstrap() {
       if (!user) {
-        router.replace('./welcome');
+        router.replace("./welcome");
         return;
       }
 
@@ -39,17 +47,20 @@ export default function UsernameScreen() {
         }
 
         if (payload.profile?.onboardingCompleted) {
-          router.replace('/(tabs)');
+          router.replace("/(tabs)");
           return;
         }
 
         if (payload.profile?.username) {
           setUsername(payload.profile.username);
-          router.replace('./wallet');
+          router.replace("./wallet");
         }
       } catch (profileError) {
         if (!cancelled) {
-          const message = profileError instanceof Error ? profileError.message : 'Failed to load profile';
+          const message =
+            profileError instanceof Error
+              ? profileError.message
+              : "Failed to load profile";
           setError(message);
         }
       }
@@ -66,62 +77,104 @@ export default function UsernameScreen() {
     const nextUsername = username.trim();
 
     if (!nextUsername) {
-      setError('Pick a username to continue');
+      setError("Pick a username to continue");
       return;
     }
 
     try {
       setSubmitting(true);
       setError(null);
-      setStatus('Saving username...');
+      setStatus("Saving username...");
       await setMyUsername(getAccessToken, nextUsername);
-      setStatus('Username saved');
-      router.replace('./wallet');
+      setStatus("Username saved");
+      router.replace("./wallet");
     } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'Failed to save username';
+      const message =
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save username";
       setError(message);
-      setStatus('');
+      setStatus("");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <OnboardingFrame
-      footer={
-        <OnboardingCta label="Go Ahead" onPress={submitUsername} disabled={submitting} variant="green" />
-      }>
-      <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
-        <View style={[styles.stepBadge, compactWidth ? styles.stepBadgeCompact : undefined]}>
-          <Text style={[styles.stepText, compactWidth ? styles.stepTextCompact : undefined]}>Step 1/2</Text>
-        </View>
-        <Text style={[styles.title, { fontSize: titleSize }]}>Set Username</Text>
-
-        <View style={[styles.inputWrap, { minHeight: fieldMinHeight }]}> 
-          <Ionicons name="person-outline" size={compactWidth ? 24 : 26} color="#8a8d93" />
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            placeholder="JohnCena"
-            placeholderTextColor="#92959b"
-            style={[styles.input, compactWidth ? styles.inputCompact : undefined]}
-            autoCapitalize="none"
-            autoCorrect={false}
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoiding}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <OnboardingFrame
+        footer={
+          <OnboardingCta
+            label="Go Ahead"
+            onPress={submitUsername}
+            disabled={submitting}
+            variant="green"
           />
-        </View>
+        }
+      >
+        <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
+          <View
+            style={[
+              styles.stepBadge,
+              compactWidth ? styles.stepBadgeCompact : undefined,
+            ]}
+          >
+            <Text
+              style={[
+                styles.stepText,
+                compactWidth ? styles.stepTextCompact : undefined,
+              ]}
+            >
+              Step 1/2
+            </Text>
+          </View>
+          <Text style={[styles.title, { fontSize: titleSize }]}>
+            Set Username
+          </Text>
 
-        {status ? <Text style={styles.statusText}>{status}</Text> : null}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      </View>
-    </OnboardingFrame>
+          <View style={[styles.inputWrap, { minHeight: fieldMinHeight }]}>
+            <Ionicons
+              name="person-outline"
+              size={compactWidth ? 24 : 26}
+              color="#8a8d93"
+            />
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              placeholder="JohnCena"
+              placeholderTextColor="#92959b"
+              style={[
+                styles.input,
+                compactWidth ? styles.inputCompact : undefined,
+              ]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void submitUsername();
+              }}
+            />
+          </View>
+
+          {status ? <Text style={styles.statusText}>{status}</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </View>
+      </OnboardingFrame>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoiding: {
+    flex: 1,
+  },
   centeredContent: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
+    alignItems: "center",
+    justifyContent: "flex-start",
     gap: 26,
   },
   stepBadge: {
@@ -130,13 +183,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderRadius: 25,
     backgroundColor: ONBOARDING_COLORS.softGray,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepText: {
-    color: '#2e2f33',
+    color: "#2e2f33",
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   stepBadgeCompact: {
     minHeight: 46,
@@ -146,18 +199,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   title: {
-    color: '#06070a',
-    fontWeight: '800',
+    color: "#06070a",
+    fontWeight: "800",
   },
   inputWrap: {
-    width: '100%',
+    width: "100%",
     minHeight: 86,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: ONBOARDING_COLORS.inputBorder,
-    backgroundColor: '#f5f5f5',
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: "#f5f5f5",
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     paddingHorizontal: 18,
   },
@@ -165,7 +218,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: ONBOARDING_COLORS.textPrimary,
     fontSize: 42 / 2,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   inputCompact: {
     fontSize: 19,
@@ -175,8 +228,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   errorText: {
-    color: '#bd3f3f',
+    color: "#bd3f3f",
     fontSize: 13,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });

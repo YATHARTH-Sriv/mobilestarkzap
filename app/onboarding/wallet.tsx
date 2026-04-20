@@ -1,37 +1,67 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { usePrivy } from '@privy-io/expo';
+import { Ionicons } from "@expo/vector-icons";
+import { usePrivy } from "@privy-io/expo";
+import * as Clipboard from "expo-clipboard";
+import { router } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import {
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+    useWindowDimensions,
+} from "react-native";
 
-import { OnboardingFrame } from '@/components/onboarding-frame';
-import { OnboardingCta } from '@/components/onboarding-cta';
-import { API_BASE_URL } from '@/lib/config';
-import { readErrorMessage, shortenAddress } from '@/lib/http';
-import { completeMyOnboarding, fetchMyProfile, type ProfileMeResponse } from '@/lib/profile';
-import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';
+import { OnboardingCta } from "@/components/onboarding-cta";
+import { OnboardingFrame } from "@/components/onboarding-frame";
+import { shortenAddress } from "@/lib/http";
+import { ONBOARDING_COLORS } from "@/lib/onboarding-theme";
+import {
+    completeMyOnboarding,
+    deployMyWallet,
+    fetchMyProfile,
+    fetchMyWalletOnboardingState,
+    fundMyWalletForOnboarding,
+    prepareMyWalletForOnboarding,
+    type ProfileMeResponse,
+    type WalletFundingState,
+    type WalletOnboardingStateResponse,
+} from "@/lib/profile";
 
-type WalletApiResponse = {
-  wallet: {
-    id: string;
-    address: string;
-    publicKey?: string;
-  };
-  deployment?: {
-    ready: boolean;
-    mode?: 'user_pays' | 'sponsored';
-    message?: string;
-  };
-};
+function fundingStatusLabel(
+  status: WalletFundingState["status"] | undefined,
+): string {
+  if (status === "funded") {
+    return "Funded";
+  }
+
+  if (status === "pending") {
+    return "Funding Pending";
+  }
+
+  if (status === "failed") {
+    return "Funding Failed";
+  }
+
+  if (status === "disabled") {
+    return "Manual Funding";
+  }
+
+  return "Ready to Fund";
+}
 
 export default function WalletStepScreen() {
   const { user, getAccessToken } = usePrivy();
   const { width, height } = useWindowDimensions();
-  const [profileData, setProfileData] = useState<ProfileMeResponse | null>(null);
-  const [status, setStatus] = useState('');
+  const [profileData, setProfileData] = useState<ProfileMeResponse | null>(
+    null,
+  );
+  const [walletState, setWalletState] =
+    useState<WalletOnboardingStateResponse | null>(null);
+  const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  const [fundingBusy, setFundingBusy] = useState(false);
+  const [deployBusy, setDeployBusy] = useState(false);
 
   const compactWidth = width <= 375;
   const compactHeight = height <= 760;
@@ -39,14 +69,53 @@ export default function WalletStepScreen() {
   const titleSize = compactWidth ? 44 : 52;
   const fieldMinHeight = compactWidth ? 78 : 88;
 
-  const walletAddress = profileData?.wallet?.address ?? null;
+  const walletAddress =
+    walletState?.wallet?.address ?? profileData?.wallet?.address ?? null;
+  const funding = walletState?.funding;
+  const canDeploy = funding?.canDeploy ?? false;
+
+  function syncWalletState(
+    payload: WalletOnboardingStateResponse,
+    profileOverride?: ProfileMeResponse["profile"],
+  ) {
+    setWalletState(payload);
+    setProfileData((prev) => ({
+      profile: profileOverride ?? prev?.profile ?? null,
+      wallet: {
+        id: payload.wallet.id,
+        address: payload.wallet.address,
+        publicKey: payload.wallet.publicKey,
+      },
+    }));
+  }
+
+  async function refreshWalletState(): Promise<WalletOnboardingStateResponse> {
+    try {
+      const payload = await fetchMyWalletOnboardingState(getAccessToken);
+      syncWalletState(payload);
+      return payload;
+    } catch (stateError) {
+      const message =
+        stateError instanceof Error
+          ? stateError.message
+          : "Failed to refresh wallet state";
+
+      if (/No Starknet wallet found/i.test(message)) {
+        const payload = await prepareMyWalletForOnboarding(getAccessToken);
+        syncWalletState(payload);
+        return payload;
+      }
+
+      throw stateError;
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
       if (!user) {
-        router.replace('./welcome');
+        router.replace("./welcome");
         return;
       }
 
@@ -59,17 +128,41 @@ export default function WalletStepScreen() {
         setProfileData(payload);
 
         if (payload.profile?.onboardingCompleted) {
-          router.replace('/(tabs)');
+          router.replace("/(tabs)");
           return;
         }
 
         if (!payload.profile?.username) {
-          router.replace('./username');
+          router.replace("./username");
+          return;
+        }
+
+        setLoadingWallet(true);
+        const onboardingWallet =
+          await prepareMyWalletForOnboarding(getAccessToken);
+        if (cancelled) {
+          return;
+        }
+
+        syncWalletState(onboardingWallet, payload.profile ?? null);
+
+        if (onboardingWallet.funding?.canDeploy) {
+          setStatus("Wallet funded. Deploy/check to continue.");
+        } else {
+          const targetAmount = onboardingWallet.funding?.amountStrk ?? "10";
+          setStatus(`Fund wallet with ${targetAmount} STRK to continue.`);
         }
       } catch (profileError) {
         if (!cancelled) {
-          const message = profileError instanceof Error ? profileError.message : 'Failed to load profile';
+          const message =
+            profileError instanceof Error
+              ? profileError.message
+              : "Failed to load profile";
           setError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWallet(false);
         }
       }
     }
@@ -82,8 +175,12 @@ export default function WalletStepScreen() {
   }, [user, getAccessToken]);
 
   const formattedAddress = useMemo(() => {
-    return walletAddress ? shortenAddress(walletAddress) : 'No wallet yet';
-  }, [walletAddress]);
+    if (walletAddress) {
+      return shortenAddress(walletAddress);
+    }
+
+    return loadingWallet ? "Preparing wallet..." : "No wallet yet";
+  }, [walletAddress, loadingWallet]);
 
   async function copyWalletAddress() {
     if (!walletAddress) {
@@ -91,89 +188,192 @@ export default function WalletStepScreen() {
     }
 
     await Clipboard.setStringAsync(walletAddress);
-    setStatus('Wallet address copied');
+    setStatus("Wallet address copied");
+  }
+
+  async function fundWallet() {
+    try {
+      setFundingBusy(true);
+      setError(null);
+
+      const amountLabel = walletState?.funding?.amountStrk ?? "10";
+      setStatus(`Funding ${amountLabel} STRK...`);
+
+      const payload = await fundMyWalletForOnboarding(getAccessToken);
+
+      setWalletState((prev) => ({
+        wallet: payload.wallet,
+        deployment: prev?.deployment,
+        funding: payload.funding,
+      }));
+
+      setProfileData((prev) => ({
+        profile: prev?.profile ?? null,
+        wallet: payload.wallet,
+      }));
+
+      if (payload.funding.canDeploy) {
+        setStatus("Wallet funded. Deploy/check to continue.");
+      } else {
+        setStatus(
+          payload.message ??
+            "Funding submitted. Tap again in a few seconds if still pending.",
+        );
+      }
+
+      await refreshWalletState();
+    } catch (fundError) {
+      const message =
+        fundError instanceof Error
+          ? fundError.message
+          : "Wallet funding failed";
+      setError(message);
+      setStatus("");
+    } finally {
+      setFundingBusy(false);
+    }
   }
 
   async function deployOrCheckWallet() {
     try {
-      setBusy(true);
+      setDeployBusy(true);
       setError(null);
-      setStatus('Preparing wallet...');
+      setStatus("Deploying wallet...");
 
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-
-      const token = await getAccessToken();
-      if (!token) {
-        throw new Error('Missing access token');
+      const currentState = walletState ?? (await refreshWalletState());
+      if (!currentState.funding?.canDeploy) {
+        const requiredAmount = currentState.funding?.amountStrk ?? "10";
+        setError(`Fund wallet with ${requiredAmount} STRK before deploy`);
+        setStatus("");
+        return;
       }
 
-      headers.Authorization = `Bearer ${token}`;
-
-      const walletEndpoint = profileData?.wallet ? '/api/wallet/deploy' : '/api/wallet/starknet';
-      const walletResponse = await fetch(`${API_BASE_URL}${walletEndpoint}`, {
-        method: 'POST',
-        headers,
-      });
-
-      if (!walletResponse.ok && walletResponse.status !== 409) {
-        throw new Error(await readErrorMessage(walletResponse));
-      }
-
-      const walletPayload = (await walletResponse.json()) as WalletApiResponse;
-      setProfileData((prev) => ({
-        profile: prev?.profile ?? null,
-        wallet: {
-          id: walletPayload.wallet.id,
-          address: walletPayload.wallet.address,
-          publicKey: walletPayload.wallet.publicKey,
-        },
-      }));
+      const walletPayload = await deployMyWallet(getAccessToken);
+      syncWalletState(walletPayload);
 
       if (walletPayload.deployment?.ready) {
-        setStatus('Wallet is ready. Finishing setup...');
+        setStatus("Wallet is ready. Finishing setup...");
+        await completeMyOnboarding(getAccessToken);
+        router.replace("./done");
+        return;
       } else if (walletPayload.deployment?.message) {
         setStatus(walletPayload.deployment.message);
       } else {
-        setStatus('Wallet checked. Finishing setup...');
+        setStatus("Wallet is not ready yet. Retry Deploy/Check.");
       }
-
-      await completeMyOnboarding(getAccessToken);
-      router.replace('./done');
     } catch (walletError) {
-      const message = walletError instanceof Error ? walletError.message : 'Wallet step failed';
+      const message =
+        walletError instanceof Error
+          ? walletError.message
+          : "Wallet step failed";
       setError(message);
-      setStatus('');
+      setStatus("");
     } finally {
-      setBusy(false);
+      setDeployBusy(false);
     }
   }
+
+  async function handlePrimaryAction() {
+    if (canDeploy) {
+      await deployOrCheckWallet();
+      return;
+    }
+
+    await fundWallet();
+  }
+
+  const ctaLabel = deployBusy
+    ? "Deploying..."
+    : fundingBusy
+      ? "Funding..."
+      : canDeploy
+        ? "Deploy / Check"
+        : "Fund Wallet";
+
+  const actionBusy = loadingWallet || deployBusy || fundingBusy;
 
   return (
     <OnboardingFrame
       footer={
         <OnboardingCta
-          label="Deploy / Check"
-          onPress={deployOrCheckWallet}
-          disabled={busy}
+          label={ctaLabel}
+          onPress={handlePrimaryAction}
+          disabled={actionBusy}
           variant="green"
         />
-      }>
+      }
+    >
       <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
-        <View style={[styles.stepBadge, compactWidth ? styles.stepBadgeCompact : undefined]}>
-          <Text style={[styles.stepText, compactWidth ? styles.stepTextCompact : undefined]}>Step 2/2</Text>
+        <View
+          style={[
+            styles.stepBadge,
+            compactWidth ? styles.stepBadgeCompact : undefined,
+          ]}
+        >
+          <Text
+            style={[
+              styles.stepText,
+              compactWidth ? styles.stepTextCompact : undefined,
+            ]}
+          >
+            Step 2/2
+          </Text>
         </View>
-        <Text style={[styles.title, { fontSize: titleSize }]}>Wallet Address</Text>
+        <Text style={[styles.title, { fontSize: titleSize }]}>
+          Wallet Address
+        </Text>
 
-        <View style={[styles.addressCard, { minHeight: fieldMinHeight }]}> 
-          <Text style={[styles.addressText, compactWidth ? styles.addressTextCompact : undefined]}>{formattedAddress}</Text>
-          <Pressable onPress={copyWalletAddress} style={[styles.copyButton, compactWidth ? styles.copyButtonCompact : undefined]}>
-            <Ionicons name="copy-outline" size={compactWidth ? 22 : 24} color={ONBOARDING_COLORS.greenDark} />
+        <View style={[styles.addressCard, { minHeight: fieldMinHeight }]}>
+          <Text
+            style={[
+              styles.addressText,
+              compactWidth ? styles.addressTextCompact : undefined,
+            ]}
+          >
+            {formattedAddress}
+          </Text>
+          <Pressable
+            onPress={copyWalletAddress}
+            disabled={!walletAddress}
+            style={[
+              styles.copyButton,
+              compactWidth ? styles.copyButtonCompact : undefined,
+              !walletAddress ? styles.copyButtonDisabled : undefined,
+            ]}
+          >
+            <Ionicons
+              name="copy-outline"
+              size={compactWidth ? 22 : 24}
+              color={ONBOARDING_COLORS.greenDark}
+            />
           </Pressable>
         </View>
 
+        <View style={styles.fundingCard}>
+          <View style={styles.fundingRow}>
+            <Text style={styles.fundingLabel}>Grant</Text>
+            <Text style={styles.fundingValue}>
+              {funding?.amountStrk ?? "10"} STRK
+            </Text>
+          </View>
+          <View style={styles.fundingRow}>
+            <Text style={styles.fundingLabel}>Balance</Text>
+            <Text style={styles.fundingValue}>
+              {funding ? `${funding.currentBalanceStrk} STRK` : "--"}
+            </Text>
+          </View>
+          <View style={styles.fundingRow}>
+            <Text style={styles.fundingLabel}>Status</Text>
+            <Text style={styles.fundingValue}>
+              {fundingStatusLabel(funding?.status)}
+            </Text>
+          </View>
+        </View>
+
         {status ? <Text style={styles.statusText}>{status}</Text> : null}
+        {funding?.error ? (
+          <Text style={styles.errorText}>{funding.error}</Text>
+        ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
     </OnboardingFrame>
@@ -183,8 +383,8 @@ export default function WalletStepScreen() {
 const styles = StyleSheet.create({
   centeredContent: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
+    alignItems: "center",
+    justifyContent: "flex-start",
     gap: 26,
   },
   stepBadge: {
@@ -193,13 +393,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderRadius: 25,
     backgroundColor: ONBOARDING_COLORS.softGray,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepText: {
-    color: '#2e2f33',
+    color: "#2e2f33",
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   stepBadgeCompact: {
     minHeight: 46,
@@ -209,25 +409,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   title: {
-    color: '#1b1d21',
-    fontWeight: '800',
+    color: "#1b1d21",
+    fontWeight: "800",
   },
   addressCard: {
-    width: '100%',
+    width: "100%",
     minHeight: 88,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: ONBOARDING_COLORS.inputBorder,
-    backgroundColor: '#f5f5f5',
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: "#f5f5f5",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 18,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   addressText: {
-    color: '#3d3f43',
+    color: "#3d3f43",
     fontSize: 20,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   addressTextCompact: {
     fontSize: 18,
@@ -236,22 +436,50 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#e8e8e8',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e8e8e8",
   },
   copyButtonCompact: {
     width: 52,
     height: 52,
   },
+  copyButtonDisabled: {
+    opacity: 0.45,
+  },
+  fundingCard: {
+    width: "100%",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#d8dde3",
+    backgroundColor: "#eef3f8",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  fundingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  fundingLabel: {
+    color: "#5c6270",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  fundingValue: {
+    color: "#1d232e",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   statusText: {
     color: ONBOARDING_COLORS.textSecondary,
     fontSize: 13,
-    textAlign: 'center',
+    textAlign: "center",
   },
   errorText: {
-    color: '#bd3f3f',
+    color: "#bd3f3f",
     fontSize: 13,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
