@@ -1,35 +1,47 @@
-import { Ionicons } from '@expo/vector-icons';
-import { usePrivy } from '@privy-io/expo';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { Ionicons } from "@expo/vector-icons";
+import { usePrivy } from "@privy-io/expo";
+import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+    ActivityIndicator,
+    FlatList,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { shortenAddress } from '@/lib/http';
+import { shortenAddress } from "@/lib/http";
 import {
-  fetchRecentPaymentContacts,
-  searchPaymentUsers,
-  type PaymentUser,
-  type RecentPaymentContact,
-} from '@/lib/payments';
-import { fetchMyProfile } from '@/lib/profile';
+    fetchRecentPaymentContacts,
+    searchPaymentUsers,
+    type PaymentUser,
+    type RecentPaymentContact,
+} from "@/lib/payments";
+import { fetchMyProfile } from "@/lib/profile";
 
-const FALLBACK_USERNAME = 'there';
+const FALLBACK_USERNAME = "there";
+
+/** Rotating palette so each avatar gets a distinct orange-spectrum colour */
+const AVATAR_COLORS = [
+  "#F5A623", // warm amber
+  "#E8753A", // burnt orange
+  "#F0C040", // golden
+  "#E85D3A", // deep orange-red
+  "#F5A623",
+  "#D96832",
+  "#F0C040",
+  "#E85D3A",
+] as const;
 
 function normalizeUsername(username: string | null | undefined): string {
-  const trimmed = (username ?? '').trim();
+  const trimmed = (username ?? "").trim();
   if (!trimmed) {
     return FALLBACK_USERNAME;
   }
@@ -48,8 +60,10 @@ export default function HomeScreen() {
 
   const [username, setUsername] = useState(FALLBACK_USERNAME);
   const [refreshingProfile, setRefreshingProfile] = useState(false);
-  const [recentContacts, setRecentContacts] = useState<RecentPaymentContact[]>([]);
-  const [searchInput, setSearchInput] = useState('');
+  const [recentContacts, setRecentContacts] = useState<RecentPaymentContact[]>(
+    [],
+  );
+  const [searchInput, setSearchInput] = useState("");
   const [searchResults, setSearchResults] = useState<PaymentUser[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [openingThreadFor, setOpeningThreadFor] = useState<string | null>(null);
@@ -74,7 +88,10 @@ export default function HomeScreen() {
 
       async function loadData() {
         try {
-          const [nextUsername] = await Promise.all([resolveUsername(), loadRecentContacts()]);
+          const [nextUsername] = await Promise.all([
+            resolveUsername(),
+            loadRecentContacts(),
+          ]);
 
           if (!cancelled) {
             setUsername(nextUsername);
@@ -97,7 +114,10 @@ export default function HomeScreen() {
   const refreshHome = useCallback(async () => {
     setRefreshingProfile(true);
     try {
-      const [nextUsername] = await Promise.all([resolveUsername(), loadRecentContacts()]);
+      const [nextUsername] = await Promise.all([
+        resolveUsername(),
+        loadRecentContacts(),
+      ]);
       setUsername(nextUsername);
     } catch {
       setUsername(FALLBACK_USERNAME);
@@ -135,7 +155,7 @@ export default function HomeScreen() {
 
       setOpeningThreadFor(recipient);
       router.push({
-        pathname: '../payments/[username]',
+        pathname: "../payments/[username]",
         params: { username: recipient },
       });
 
@@ -146,21 +166,22 @@ export default function HomeScreen() {
     [router],
   );
 
-  const cardSizing = useMemo(() => {
-    const compact = width < 380;
+  /* ── responsive helpers ─────────────────────────────────── */
+  const compact = width < 375;
+  const medium = width >= 375 && width < 414;
 
-    return {
-      minHeight: compact ? 224 : 248,
-      radius: compact ? 30 : 34,
-      padding: compact ? 20 : 24,
-    };
-  }, [width]);
+  const avatarSize = compact ? 56 : medium ? 62 : 68;
+  const avatarFontSize = compact ? 13 : 15;
+  const contactNameSize = compact ? 12 : 14;
 
   const normalizedSearchInput = searchInput.trim();
-  const showSendToWalletRow = looksLikeWalletAddress(normalizedSearchInput) && !searchingUsers && searchResults.length === 0;
+  const showSendToWalletRow =
+    looksLikeWalletAddress(normalizedSearchInput) &&
+    !searchingUsers &&
+    searchResults.length === 0;
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.contentWrap}
@@ -173,37 +194,32 @@ export default function HomeScreen() {
             }}
             tintColor="#08a844"
           />
-        }>
-        <View style={styles.topControlsRow}>
-          <View style={styles.topSpacer} />
+        }
+      >
+        {/* ── Welcome ─────────────────────────────────── */}
+        <View style={styles.welcomeRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.homeWelcomeLabel}>Welcome</Text>
+            <Text style={styles.homeUsername} numberOfLines={1}>
+              {username}
+            </Text>
+          </View>
+
           <Pressable
             style={styles.refreshButton}
             onPress={() => {
               void refreshHome();
-            }}>
-            <Ionicons name="refresh" size={20} color="#6a6d72" />
+            }}
+          >
+            <Ionicons name="refresh" size={18} color="#8e9196" />
           </Pressable>
         </View>
 
-        <View style={styles.welcomeRow}>
-          <Text style={styles.homeWelcomeLabel}>Welcome</Text>
-          <Text style={styles.homeUsername} numberOfLines={1}>
-            {username}
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.sendCard,
-            {
-              minHeight: cardSizing.minHeight,
-              borderRadius: cardSizing.radius,
-              padding: cardSizing.padding,
-            },
-          ]}>
+        {/* ── Send Money Card ────────────────────────── */}
+        <View style={styles.sendCard}>
           <View style={styles.sendHeaderRow}>
             <View style={styles.sendIconWrap}>
-              <Ionicons name="paper-plane-outline" size={24} color="#f1f8f2" />
+              <Ionicons name="paper-plane-outline" size={22} color="#fff" />
             </View>
 
             <View style={styles.sendHeaderTextWrap}>
@@ -220,14 +236,20 @@ export default function HomeScreen() {
                 void searchUsers(value);
               }}
               placeholder="Enter wallet address or search"
-              placeholderTextColor="#e3f5e6"
+              placeholderTextColor="rgba(255,255,255,0.65)"
               style={styles.searchInput}
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
 
-          {searchingUsers ? <ActivityIndicator size="small" color="#eefaf0" style={styles.searchLoader} /> : null}
+          {searchingUsers ? (
+            <ActivityIndicator
+              size="small"
+              color="#eefaf0"
+              style={styles.searchLoader}
+            />
+          ) : null}
 
           {searchResults.length > 0 ? (
             <View style={styles.searchResultsWrap}>
@@ -239,9 +261,14 @@ export default function HomeScreen() {
                     setSearchInput(result.username);
                     setSearchResults([]);
                     openPaymentThread(result.walletAddress);
-                  }}>
-                  <Text style={styles.searchResultName}>@{result.username}</Text>
-                  <Text style={styles.searchResultWallet}>{shortenAddress(result.walletAddress)}</Text>
+                  }}
+                >
+                  <Text style={styles.searchResultName}>
+                    @{result.username}
+                  </Text>
+                  <Text style={styles.searchResultWallet}>
+                    {shortenAddress(result.walletAddress)}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -253,10 +280,13 @@ export default function HomeScreen() {
                 style={styles.searchResultRow}
                 onPress={() => {
                   openPaymentThread(normalizedSearchInput);
-                }}>
+                }}
+              >
                 <View style={styles.walletSendRowTextWrap}>
                   <Text style={styles.searchResultName}>Send to wallet</Text>
-                  <Text style={styles.searchResultWallet}>{shortenAddress(normalizedSearchInput)}</Text>
+                  <Text style={styles.searchResultWallet}>
+                    {shortenAddress(normalizedSearchInput)}
+                  </Text>
                 </View>
                 <Ionicons name="arrow-forward" size={16} color="#dff3e2" />
               </Pressable>
@@ -264,44 +294,77 @@ export default function HomeScreen() {
           ) : null}
         </View>
 
+        {/* ── Recent Contacts ────────────────────────── */}
         <Text style={styles.sectionTitle}>Recent</Text>
 
         {recentContacts.length === 0 ? (
           <View style={styles.emptyRecentCard}>
             <Text style={styles.emptyRecentTitle}>No recent people yet</Text>
-            <Text style={styles.emptyRecentBody}>Your direct payment contacts will appear here.</Text>
+            <Text style={styles.emptyRecentBody}>
+              Your direct payment contacts will appear here.
+            </Text>
           </View>
         ) : (
           <FlatList
             data={recentContacts}
             keyExtractor={(item) => `${item.username}-${item.walletAddress}`}
-            numColumns={4}
-            scrollEnabled={false}
-            columnWrapperStyle={styles.recentGridRow}
-            renderItem={({ item }) => {
+            horizontal
+            scrollEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recentListRow}
+            renderItem={({ item, index }) => {
               const initials = looksLikeWalletAddress(item.username)
                 ? item.walletAddress.slice(2, 4).toUpperCase()
                 : item.username.slice(0, 2).toUpperCase();
 
+              const avatarBg = AVATAR_COLORS[index % AVATAR_COLORS.length];
+
               return (
                 <Pressable
-                  style={styles.recentContactItem}
+                  style={[styles.recentContactItem, { width: avatarSize + 14 }]}
                   onPress={() => {
                     openPaymentThread(item.walletAddress);
-                  }}>
-                  <View style={styles.recentContactAvatar}>
-                    <Text style={styles.recentContactInitials}>{initials}</Text>
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.recentContactAvatar,
+                      {
+                        width: avatarSize,
+                        height: avatarSize,
+                        borderRadius: avatarSize / 2,
+                        backgroundColor: avatarBg,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.recentContactInitials,
+                        { fontSize: avatarFontSize },
+                      ]}
+                    >
+                      {initials}
+                    </Text>
                   </View>
-                  <Text style={styles.recentContactName} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.recentContactName,
+                      { fontSize: contactNameSize },
+                    ]}
+                    numberOfLines={1}
+                  >
                     {item.username}
                   </Text>
-                  {item.isExternal ? <Text style={styles.externalContactTag}>External</Text> : null}
+                  {item.isExternal ? (
+                    <Text style={styles.externalContactTag}>External</Text>
+                  ) : null}
                 </Pressable>
               );
             }}
           />
         )}
 
+        {/* ── Quick Actions ──────────────────────────── */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
 
         <View style={styles.quickActionsRow}>
@@ -316,9 +379,10 @@ export default function HomeScreen() {
               if (searchInput.trim().length > 0) {
                 openPaymentThread(searchInput.trim());
               }
-            }}>
+            }}
+          >
             <View style={styles.quickActionIconWrapPrimary}>
-              <Ionicons name="paper-plane-outline" size={24} color="#ff6a00" />
+              <Ionicons name="paper-plane-outline" size={22} color="#f27a1a" />
             </View>
             <Text style={styles.quickActionTitle}>Send</Text>
             <Text style={styles.quickActionBody}>Transfer crypto</Text>
@@ -330,9 +394,10 @@ export default function HomeScreen() {
               if (recentContacts[0]?.walletAddress) {
                 openPaymentThread(recentContacts[0].walletAddress);
               }
-            }}>
+            }}
+          >
             <View style={styles.quickActionIconWrapSecondary}>
-              <Ionicons name="add" size={26} color="#d58a00" />
+              <Ionicons name="add" size={24} color="#d4920a" />
             </View>
             <Text style={styles.quickActionTitle}>Receive</Text>
             <Text style={styles.quickActionBody}>Get crypto</Text>
@@ -341,7 +406,11 @@ export default function HomeScreen() {
 
         {openingThreadFor ? (
           <Text style={styles.navigationHint}>
-            Opening {looksLikeWalletAddress(openingThreadFor) ? shortenAddress(openingThreadFor) : `@${openingThreadFor}`}...
+            Opening{" "}
+            {looksLikeWalletAddress(openingThreadFor)
+              ? shortenAddress(openingThreadFor)
+              : `@${openingThreadFor}`}
+            ...
           </Text>
         ) : null}
       </ScrollView>
@@ -349,253 +418,264 @@ export default function HomeScreen() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
+  /* ── scaffold ──────────────────────────────────────────── */
   screen: {
     flex: 1,
-    backgroundColor: '#f5f5f3',
+    backgroundColor: "#faf9f7",
   },
   scroll: {
     flex: 1,
   },
   contentWrap: {
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 118,
-    gap: 16,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 100,
+    gap: 18,
   },
-  topControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  topSpacer: {
-    width: 34,
-    height: 34,
-  },
-  refreshButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ececec',
-  },
+
+  /* ── welcome row ───────────────────────────────────────── */
   welcomeRow: {
-    gap: 4,
-    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginTop: 4,
   },
   homeWelcomeLabel: {
-    color: '#1a1d22',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 42 / 2,
+    color: "#1a1d22",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 30,
+    letterSpacing: -0.3,
   },
   homeUsername: {
-    color: '#54585f',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 23,
-    lineHeight: 30,
+    color: "#6b6e74",
+    fontFamily: "Inter_500Medium",
+    fontSize: 18,
+    lineHeight: 26,
+    marginTop: 2,
   },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    marginTop: 6,
+  },
+
+  /* ── send money card ───────────────────────────────────── */
   sendCard: {
-    backgroundColor: '#05ad43',
-    borderWidth: 1,
-    borderColor: '#02a33f',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 13,
+    backgroundColor: "#2daa57",
+    borderRadius: 24,
+    padding: 20,
+    gap: 14,
+    shadowColor: "#1b7a39",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-    gap: 12,
+    elevation: 4,
   },
   sendHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
   },
   sendIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendHeaderTextWrap: {
     flex: 1,
     gap: 2,
   },
   sendTitle: {
-    color: '#eff9f1',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 22,
+    color: "#ffffff",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 20,
+    letterSpacing: -0.2,
   },
   sendSubtitle: {
-    color: '#dcf5e2',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 16,
+    color: "rgba(255,255,255,0.78)",
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
   },
   searchInputWrap: {
-    minHeight: 76,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: '#0f2f18',
-    backgroundColor: '#06b244',
-    paddingHorizontal: 18,
-    justifyContent: 'center',
+    height: 52,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "rgba(0,0,0,0.25)",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    paddingHorizontal: 16,
+    justifyContent: "center",
   },
   searchInput: {
-    color: '#ecf9ef',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 18,
+    color: "#ffffff",
+    fontFamily: "Inter_500Medium",
+    fontSize: 15,
   },
   searchLoader: {
     marginTop: 2,
   },
   searchResultsWrap: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.14)',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    overflow: 'hidden',
+    borderColor: "rgba(0,0,0,0.12)",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    overflow: "hidden",
   },
   searchResultRow: {
-    minHeight: 50,
+    minHeight: 46,
     paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.17)',
+    borderBottomColor: "rgba(255,255,255,0.14)",
   },
   searchResultName: {
-    color: '#f2fbf4',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 15,
+    color: "#f2fbf4",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
   },
   searchResultWallet: {
-    color: '#d5f0dc',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 13,
+    color: "rgba(255,255,255,0.65)",
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
   },
   walletSendRowTextWrap: {
     flex: 1,
     gap: 1,
   },
+
+  /* ── section ───────────────────────────────────────────── */
   sectionTitle: {
-    color: '#1e2126',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 22,
+    color: "#1e2126",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 20,
+    letterSpacing: -0.15,
+    marginTop: 4,
   },
+
+  /* ── empty recent ──────────────────────────────────────── */
   emptyRecentCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#dddddd',
-    backgroundColor: '#f8f8f8',
-    minHeight: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#e8e8e8",
+    backgroundColor: "#ffffff",
+    minHeight: 80,
+    alignItems: "center",
+    justifyContent: "center",
     gap: 3,
   },
   emptyRecentTitle: {
-    color: '#24272c',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 16,
+    color: "#24272c",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
   },
   emptyRecentBody: {
-    color: '#7a7f87',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 13,
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
   },
-  recentGridRow: {
-    justifyContent: 'space-between',
-    marginBottom: 14,
+
+  /* ── recent contacts grid ──────────────────────────────── */
+  recentListRow: {
+    paddingRight: 8,
+    marginBottom: 16,
   },
   recentContactItem: {
-    width: '23%',
-    alignItems: 'center',
-    gap: 7,
+    alignItems: "center",
+    gap: 6,
+    marginRight: 18,
   },
   recentContactAvatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: '#ffa000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.09,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   recentContactInitials: {
-    color: '#fff8ef',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 15,
+    color: "#ffffff",
+    fontFamily: "Inter_600SemiBold",
   },
   recentContactName: {
-    color: '#3f4349',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 15,
+    color: "#3f4349",
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
   },
   externalContactTag: {
     marginTop: 1,
-    color: '#7a5d1e',
-    backgroundColor: '#f8eabf',
+    color: "#7a5d1e",
+    backgroundColor: "#f8eabf",
     paddingHorizontal: 6,
     borderRadius: 8,
-    overflow: 'hidden',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 10,
+    overflow: "hidden",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
     lineHeight: 14,
   },
+
+  /* ── quick actions ─────────────────────────────────────── */
   quickActionsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   quickActionCard: {
     flex: 1,
-    minHeight: 146,
-    borderRadius: 22,
+    minHeight: 130,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#dddddd',
-    backgroundColor: '#f8f8f8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
+    borderColor: "#ebebeb",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 16,
   },
   quickActionIconWrapPrimary: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#fdebd4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#fff0e0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
   },
   quickActionIconWrapSecondary: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#f6efcd',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#fdf5d8",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
   },
   quickActionTitle: {
-    color: '#23262b',
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 19,
-  },
-  quickActionBody: {
-    color: '#757981',
-    fontFamily: 'Inter_500Medium',
+    color: "#23262b",
+    fontFamily: "Inter_600SemiBold",
     fontSize: 16,
   },
-  navigationHint: {
-    color: '#6d7076',
-    fontFamily: 'Inter_500Medium',
+  quickActionBody: {
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
     fontSize: 13,
+  },
+
+  /* ── misc ──────────────────────────────────────────────── */
+  navigationHint: {
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
     marginTop: 2,
   },
 });

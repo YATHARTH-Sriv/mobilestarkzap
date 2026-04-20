@@ -1,31 +1,35 @@
-import '@/lib/runtime-polyfills';
-import { usePrivy } from '@privy-io/expo';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import "@/lib/runtime-polyfills";
+import { Ionicons } from "@expo/vector-icons";
+import { usePrivy } from "@privy-io/expo";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+    Animated,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { API_BASE_URL, WS_BASE_URL } from '@/lib/config';
-import { readErrorMessage, shortenAddress } from '@/lib/http';
+import { API_BASE_URL, WS_BASE_URL } from "@/lib/config";
+import { readErrorMessage, shortenAddress } from "@/lib/http";
 import {
-  connectRealtimeSocket,
-  fetchMyProfile,
-  fetchMyTransactions,
-  type ProfileMeResponse,
-  type UserTransactionActivity,
-} from '@/lib/profile';
-import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';
+    connectRealtimeSocket,
+    fetchMyProfile,
+    fetchMyTransactions,
+    formatWeiToStrk,
+    type ProfileMeResponse,
+    type UserTransactionActivity,
+} from "@/lib/profile";
+import { hp, ms, wp } from "@/lib/responsive";
 
 type RoomSummary = {
   roomName: string;
@@ -35,7 +39,7 @@ type RoomSummary = {
 
 type RoomMessage = {
   id: string;
-  type: 'message_received';
+  type: "message_received";
   room: string;
   userId: string;
   username: string;
@@ -75,11 +79,11 @@ type MarketDetail = {
 };
 
 type WsServerMessage =
-  | { type: 'connection'; clientId: string }
-  | { type: 'error'; message: string }
-  | { type: 'room_joined'; room: string }
-  | { type: 'room_left'; room: string }
-  | { type: 'message_history'; messages: RoomMessage[] }
+  | { type: "connection"; clientId: string }
+  | { type: "error"; message: string }
+  | { type: "room_joined"; room: string }
+  | { type: "room_left"; room: string }
+  | { type: "message_history"; messages: RoomMessage[] }
   | RoomMessage;
 
 type ActiveMarketCard = {
@@ -98,9 +102,11 @@ type ActiveMarketCard = {
   isCreator: boolean;
   isMine: boolean;
   hasPlacedBet: boolean;
+  hasClaimed: boolean;
+  canClaim: boolean;
 };
 
-type MarketActionType = 'bet' | 'resolve' | 'claim';
+type MarketActionType = "bet" | "resolve" | "claim";
 
 type MarketActionModalState = {
   visible: boolean;
@@ -108,63 +114,75 @@ type MarketActionModalState = {
   market: ActiveMarketCard | null;
 };
 
+const DEFAULT_CREATE_DEADLINE_SECONDS = 2 * 60 * 60;
+
 const MSG = {
-  JOIN_ROOM: 'join_room',
-  LEAVE_ROOM: 'leave_room',
-  CHAT_MESSAGE: 'chat_message',
+  JOIN_ROOM: "join_room",
+  LEAVE_ROOM: "leave_room",
+  CHAT_MESSAGE: "chat_message",
 } as const;
 
-const ROOM_ICONS = ['football-outline', 'trending-up-outline', 'american-football-outline', 'basketball-outline'];
+const ROOM_ICONS = [
+  "football-outline",
+  "trending-up-outline",
+  "american-football-outline",
+  "basketball-outline",
+];
 
 function normalizeHexAddress(value: string | null | undefined): string | null {
-  if (!value || typeof value !== 'string') {
+  if (!value || typeof value !== "string") {
     return null;
   }
 
   const trimmed = value.trim().toLowerCase();
-  if (!trimmed.startsWith('0x')) {
+  if (!trimmed.startsWith("0x")) {
     return null;
   }
 
-  const withoutLeading = trimmed.slice(2).replace(/^0+/, '');
-  return `0x${withoutLeading || '0'}`;
+  const withoutLeading = trimmed.slice(2).replace(/^0+/, "");
+  return `0x${withoutLeading || "0"}`;
 }
 
 function formatRoomTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.valueOf())) {
-    return '-';
+    return "-";
   }
 
   const now = new Date();
   const sameDay = now.toDateString() === date.toDateString();
   if (sameDay) {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function formatMessageTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.valueOf())) {
-    return '';
+    return "";
   }
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function formatDeadline(unix: string | null): string {
   if (!unix || !/^\d+$/.test(unix)) {
-    return 'No deadline';
+    return "No deadline";
   }
 
   const milliseconds = Number(unix) * 1000;
   const date = new Date(milliseconds);
   if (Number.isNaN(date.valueOf())) {
-    return 'No deadline';
+    return "No deadline";
   }
 
-  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function parseStrkToWei(value: string): string | null {
@@ -173,10 +191,10 @@ function parseStrkToWei(value: string): string | null {
     return null;
   }
 
-  const [wholePart, fractionalPart = ''] = normalized.split('.');
+  const [wholePart, fractionalPart = ""] = normalized.split(".");
   const whole = BigInt(wholePart);
-  const fractionPadded = `${fractionalPart}${'0'.repeat(18)}`.slice(0, 18);
-  const fraction = BigInt(fractionPadded || '0');
+  const fractionPadded = `${fractionalPart}${"0".repeat(18)}`.slice(0, 18);
+  const fraction = BigInt(fractionPadded || "0");
 
   const wei = whole * 10n ** 18n + fraction;
   if (wei <= 0n) {
@@ -186,18 +204,56 @@ function parseStrkToWei(value: string): string | null {
   return wei.toString();
 }
 
+function parseOutcomeBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    if (normalized === "yes" || normalized === "true" || normalized === "1") {
+      return true;
+    }
+
+    if (normalized === "no" || normalized === "false" || normalized === "0") {
+      return false;
+    }
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+function formatPoolAsStrk(wei: string): string {
+  try {
+    return formatWeiToStrk(wei);
+  } catch {
+    return "0 STRK";
+  }
+}
+
 function toAsciiTitle(raw: string): string {
   return raw
-    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[^\x20-\x7E]/g, "")
     .trim()
     .slice(0, 31);
 }
 
 function normalizeRoomName(raw: string): string {
   return raw
-    .replace(/\s+/g, ' ')
+    .replace(/\s+/g, " ")
     .trim()
-    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[^\x20-\x7E]/g, "")
     .slice(0, 40);
 }
 
@@ -213,13 +269,17 @@ function parseDeadlineToUnix(raw: string): string | null {
       return null;
     }
 
-    const seconds = parsed > 1_000_000_000_000 ? Math.trunc(parsed / 1000) : Math.trunc(parsed);
+    const seconds =
+      parsed > 1_000_000_000_000
+        ? Math.trunc(parsed / 1000)
+        : Math.trunc(parsed);
     return seconds > 0 ? String(seconds) : null;
   }
 
-  const compact = trimmed.replace(/\s+/g, ' ');
-  const normalized =
-    /^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}$/.test(compact) ? compact.replace(' ', 'T') : compact;
+  const compact = trimmed.replace(/\s+/g, " ");
+  const normalized = /^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}$/.test(compact)
+    ? compact.replace(" ", "T")
+    : compact;
 
   const parsedDate = new Date(normalized);
   if (Number.isNaN(parsedDate.valueOf())) {
@@ -231,14 +291,14 @@ function parseDeadlineToUnix(raw: string): string | null {
 
 function marketStageLabel(market: ActiveMarketCard): string {
   if (market.resolved) {
-    return 'Resolved';
+    return "Resolved";
   }
 
   if (market.canResolve) {
-    return 'Awaiting Resolution';
+    return "Awaiting Resolution";
   }
 
-  return 'Open';
+  return "Open";
 }
 
 export default function ChatsScreen() {
@@ -248,8 +308,9 @@ export default function ChatsScreen() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const messageScrollRef = useRef<ScrollView | null>(null);
+  const claimedMarketIdsRef = useRef<Set<string>>(new Set());
 
-  const [status, setStatus] = useState('Ready');
+  const [status, setStatus] = useState("Ready");
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -257,13 +318,13 @@ export default function ChatsScreen() {
   const [identity, setIdentity] = useState<ProfileMeResponse | null>(null);
 
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [roomDraft, setRoomDraft] = useState('');
+  const [roomDraft, setRoomDraft] = useState("");
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [createRoomModalVisible, setCreateRoomModalVisible] = useState(false);
-  const [createRoomNameDraft, setCreateRoomNameDraft] = useState('');
+  const [createRoomNameDraft, setCreateRoomNameDraft] = useState("");
 
   const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
-  const [messageDraft, setMessageDraft] = useState('');
+  const [messageDraft, setMessageDraft] = useState("");
 
   const [activeMarkets, setActiveMarkets] = useState<ActiveMarketCard[]>([]);
   const [refreshingRooms, setRefreshingRooms] = useState(false);
@@ -274,18 +335,18 @@ export default function ChatsScreen() {
   const drawerTranslateX = useRef(new Animated.Value(-(width * 0.78))).current;
 
   const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [createTitle, setCreateTitle] = useState('');
-  const [createDeadlineInput, setCreateDeadlineInput] = useState('');
-  const [createPolymarketUrl, setCreatePolymarketUrl] = useState('');
+  const [createTitle, setCreateTitle] = useState("");
+  const [createDeadlineInput, setCreateDeadlineInput] = useState("");
+  const [createPolymarketUrl, setCreatePolymarketUrl] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
 
   const [actionModal, setActionModal] = useState<MarketActionModalState>({
     visible: false,
-    action: 'bet',
+    action: "bet",
     market: null,
   });
   const [actionBusy, setActionBusy] = useState(false);
-  const [betAmountStrk, setBetAmountStrk] = useState('10');
+  const [betAmountStrk, setBetAmountStrk] = useState("10");
   const [betOutcomeYes, setBetOutcomeYes] = useState(true);
   const [resolveYes, setResolveYes] = useState(true);
 
@@ -294,9 +355,60 @@ export default function ChatsScreen() {
 
   const drawerWidth = useMemo(() => Math.min(width * 0.8, 420), [width]);
 
+  const createDeadlineDate = useMemo(() => {
+    const parsed = parseDeadlineToUnix(createDeadlineInput);
+    if (!parsed) {
+      return null;
+    }
+
+    const next = new Date(Number(parsed) * 1000);
+    return Number.isNaN(next.valueOf()) ? null : next;
+  }, [createDeadlineInput]);
+
+  const createDeadlineLabel = useMemo(() => {
+    if (!createDeadlineDate) {
+      return "Pick a deadline";
+    }
+
+    return createDeadlineDate.toLocaleString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }, [createDeadlineDate]);
+
+  const createDeadlineHint = useMemo(() => {
+    if (!createDeadlineDate) {
+      return "Choose a closing time with quick actions below.";
+    }
+
+    const secondsLeft = Math.trunc(
+      (createDeadlineDate.getTime() - Date.now()) / 1000,
+    );
+    if (secondsLeft <= 0) {
+      return "This time has passed. Pick a future deadline.";
+    }
+
+    const days = Math.floor(secondsLeft / 86400);
+    const hours = Math.floor((secondsLeft % 86400) / 3600);
+    const minutes = Math.max(1, Math.floor((secondsLeft % 3600) / 60));
+
+    if (days > 0) {
+      return `Closes in ${days}d ${hours}h`;
+    }
+
+    if (hours > 0) {
+      return `Closes in ${hours}h ${minutes}m`;
+    }
+
+    return `Closes in ${minutes}m`;
+  }, [createDeadlineDate]);
+
   const buildHeaders = useCallback(async (): Promise<HeadersInit> => {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     const token = await getAccessToken();
@@ -317,8 +429,8 @@ export default function ChatsScreen() {
       const payload = await fetchMyProfile(getAccessToken);
       setIdentity(payload);
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : 'Failed to load identity';
-      setError(message);
+      console.error(loadError);
+      setError("Failed to load identity");
     }
   }, [authenticated, getAccessToken]);
 
@@ -332,8 +444,8 @@ export default function ChatsScreen() {
       const payload = (await response.json()) as { rooms: RoomSummary[] };
       setRooms(payload.rooms);
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : 'Failed to load rooms';
-      setError(message);
+      console.error(loadError);
+      setError("Failed to load rooms");
     }
   }, []);
 
@@ -349,8 +461,8 @@ export default function ChatsScreen() {
       const payload = (await response.json()) as { messages: RoomMessage[] };
       setRoomMessages(payload.messages);
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : 'Failed to load room messages';
-      setError(message);
+      console.error(loadError);
+      setError("Failed to load room messages");
     }
   }, []);
 
@@ -369,7 +481,9 @@ export default function ChatsScreen() {
             throw new Error(await readErrorMessage(marketsResponse));
           }
 
-          const marketsPayload = (await marketsResponse.json()) as { markets: RoomContractMarket[] };
+          const marketsPayload = (await marketsResponse.json()) as {
+            markets: RoomContractMarket[];
+          };
           roomMarkets.push(...marketsPayload.markets);
 
           if (marketsPayload.markets.length < pageSize) {
@@ -383,20 +497,53 @@ export default function ChatsScreen() {
         }
 
         const transactionsResponse = authenticated
-          ? await fetchMyTransactions(getAccessToken, 50).catch(() => ({
+          ? await fetchMyTransactions(getAccessToken, 200).catch(() => ({
               transactions: [] as UserTransactionActivity[],
-              limit: 50,
+              limit: 200,
             }))
-          : { transactions: [] as UserTransactionActivity[], limit: 50 };
+          : { transactions: [] as UserTransactionActivity[], limit: 200 };
 
-        const betPlacedSet = new Set(
-          transactionsResponse.transactions
-            .filter((transaction) => transaction.status === 'success' && transaction.action === 'Bet Placed')
-            .map((transaction) => {
-              const metadata = transaction.metadata as { marketId?: unknown };
-              return String(metadata.marketId ?? '');
-            }),
-        );
+        const betPlacedSet = new Set<string>();
+        const betOutcomeByMarket = new Map<string, boolean>();
+        const claimedSet = new Set(claimedMarketIdsRef.current);
+
+        for (const transaction of transactionsResponse.transactions) {
+          if (transaction.status !== "success") {
+            continue;
+          }
+
+          const metadata = transaction.metadata as {
+            marketId?: unknown;
+            outcome?: unknown;
+          };
+
+          const marketId =
+            typeof metadata.marketId === "number" ||
+            typeof metadata.marketId === "string"
+              ? String(metadata.marketId)
+              : "";
+
+          if (!marketId) {
+            continue;
+          }
+
+          const action = transaction.action.trim().toLowerCase();
+
+          if (action.includes("bet")) {
+            betPlacedSet.add(marketId);
+
+            const outcome = parseOutcomeBoolean(metadata.outcome);
+            if (outcome !== null) {
+              betOutcomeByMarket.set(marketId, outcome);
+            }
+          }
+
+          if (action.includes("claim")) {
+            claimedSet.add(marketId);
+          }
+        }
+
+        claimedMarketIdsRef.current = claimedSet;
 
         const enriched = await Promise.all(
           roomMarkets.map(async (market) => {
@@ -435,18 +582,44 @@ export default function ChatsScreen() {
               // Ignore per-market detail failures and use fallback metadata.
             }
 
-            const creator = detail?.chain.creator ?? market.createdByWalletAddress;
-            const title = detail?.chain.questionAscii ?? market.title ?? `Market #${market.marketId}`;
-            const resolved = detail?.chain.resolved ?? canResolvePayload?.isResolved ?? false;
-            const winningOutcome = resolved ? detail?.chain.winningOutcome ?? null : null;
-            const deadlineUnix = detail?.chain.deadlineUnix ?? market.deadlineUnix ?? null;
-            const yesPool = detail?.chain.yesPool ?? '0';
-            const noPool = detail?.chain.noPool ?? '0';
-            const totalPool = detail?.chain.totalPool ?? '0';
+            const marketId = String(market.marketId);
+            const creator =
+              detail?.chain.creator ?? market.createdByWalletAddress;
+            const title =
+              detail?.chain.questionAscii ??
+              market.title ??
+              `Market #${market.marketId}`;
+            const resolved =
+              detail?.chain.resolved ?? canResolvePayload?.isResolved ?? false;
+            const winningOutcome = resolved
+              ? (detail?.chain.winningOutcome ?? null)
+              : null;
+            const deadlineUnix =
+              detail?.chain.deadlineUnix ?? market.deadlineUnix ?? null;
+            const yesPool = detail?.chain.yesPool ?? "0";
+            const noPool = detail?.chain.noPool ?? "0";
+            const hasPlacedBet = betPlacedSet.has(marketId);
+            const hasClaimed = claimedSet.has(marketId);
+            const userBetOutcome = betOutcomeByMarket.get(marketId);
+
+            const canClaim =
+              resolved &&
+              hasPlacedBet &&
+              !hasClaimed &&
+              winningOutcome !== null &&
+              (userBetOutcome === undefined ||
+                userBetOutcome === winningOutcome);
+
+            const totalPool = hasClaimed
+              ? "0"
+              : (detail?.chain.totalPool ?? "0");
 
             const normalizedCreator = normalizeHexAddress(creator);
             const normalizedMine = normalizeHexAddress(myWalletAddress);
-            const isMine = normalizedCreator !== null && normalizedMine !== null && normalizedCreator === normalizedMine;
+            const isMine =
+              normalizedCreator !== null &&
+              normalizedMine !== null &&
+              normalizedCreator === normalizedMine;
 
             return {
               id: market.id,
@@ -463,15 +636,17 @@ export default function ChatsScreen() {
               canResolve: Boolean(canResolvePayload?.canResolve),
               isCreator: Boolean(canResolvePayload?.isCreator),
               isMine,
-              hasPlacedBet: betPlacedSet.has(String(market.marketId)),
+              hasPlacedBet,
+              hasClaimed,
+              canClaim,
             } as ActiveMarketCard;
           }),
         );
 
         setActiveMarkets(enriched);
       } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : 'Failed to load room markets';
-        setError(message);
+        console.error(loadError);
+        setError("Failed to load room markets");
       }
     },
     [authenticated, getAccessToken, buildHeaders, myWalletAddress],
@@ -480,7 +655,7 @@ export default function ChatsScreen() {
   const sendWs = useCallback((payload: Record<string, unknown>) => {
     const socket = wsRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setError('Realtime socket is not connected');
+      setError("Realtime socket is not connected");
       return;
     }
 
@@ -490,17 +665,21 @@ export default function ChatsScreen() {
   const connectSocket = useCallback(async () => {
     if (!authenticated) {
       setIsConnected(false);
-      setStatus('Authenticate with Privy to chat');
+      setStatus("Authenticate with Privy to chat");
       return;
     }
 
     const current = wsRef.current;
-    if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
+    if (
+      current &&
+      (current.readyState === WebSocket.OPEN ||
+        current.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
     setError(null);
-    setStatus('Connecting...');
+    setStatus("Connecting...");
 
     try {
       await loadIdentity();
@@ -509,18 +688,18 @@ export default function ChatsScreen() {
 
       socket.onopen = () => {
         setIsConnected(true);
-        setStatus('Connected');
+        setStatus("Connected");
       };
 
       socket.onclose = () => {
         setIsConnected(false);
-        setStatus('Disconnected');
+        setStatus("Disconnected");
       };
 
       socket.onerror = () => {
         setIsConnected(false);
-        setStatus('Socket error');
-        setError('Realtime socket error');
+        setStatus("Socket error");
+        setError("Realtime socket error");
       };
 
       socket.onmessage = (event) => {
@@ -528,41 +707,41 @@ export default function ChatsScreen() {
           const payload = JSON.parse(String(event.data)) as WsServerMessage;
 
           switch (payload.type) {
-            case 'connection':
+            case "connection":
               setClientId(payload.clientId);
               return;
-            case 'error':
+            case "error":
               setError(payload.message);
               return;
-            case 'room_joined':
+            case "room_joined":
               setActiveRoom(payload.room);
               setStatus(`Joined #${payload.room}`);
               void loadRooms();
               return;
-            case 'room_left':
+            case "room_left":
               setActiveRoom(null);
               setRoomMessages([]);
               setActiveMarkets([]);
-              setStatus('Left room');
+              setStatus("Left room");
               void loadRooms();
               return;
-            case 'message_history':
+            case "message_history":
               setRoomMessages(payload.messages);
               return;
-            case 'message_received':
+            case "message_received":
               setRoomMessages((previous) => [...previous, payload]);
               return;
             default:
               return;
           }
         } catch {
-          setError('Invalid websocket payload');
+          setError("Invalid websocket payload");
         }
       };
     } catch (connectError) {
-      const message = connectError instanceof Error ? connectError.message : 'Socket auth failed';
-      setError(message);
-      setStatus('Socket auth failed');
+      console.error(connectError);
+      setError("Socket auth failed");
+      setStatus("Socket auth failed");
       setIsConnected(false);
     }
   }, [authenticated, getAccessToken, loadIdentity, loadRooms]);
@@ -597,7 +776,14 @@ export default function ChatsScreen() {
     } finally {
       setRefreshingMessages(false);
     }
-  }, [activeRoom, drawerVisible, loadRoomMessages, loadActiveRoomMarkets, loadRooms, refreshRooms]);
+  }, [
+    activeRoom,
+    drawerVisible,
+    loadRoomMessages,
+    loadActiveRoomMarkets,
+    loadRooms,
+    refreshRooms,
+  ]);
 
   const refreshMarkets = useCallback(async () => {
     if (!activeRoom) {
@@ -647,21 +833,30 @@ export default function ChatsScreen() {
         }
       }
 
-      const interval = setInterval(() => {
-        if (activeRoom) {
-          void loadRoomMessages(activeRoom);
-          if (drawerVisible) {
-            void loadActiveRoomMarkets(activeRoom);
+      const interval = setInterval(
+        () => {
+          if (activeRoom) {
+            void loadRoomMessages(activeRoom);
+            if (drawerVisible) {
+              void loadActiveRoomMarkets(activeRoom);
+            }
+          } else {
+            void loadRooms();
           }
-        } else {
-          void loadRooms();
-        }
-      }, activeRoom ? 5000 : 7000);
+        },
+        activeRoom ? 5000 : 7000,
+      );
 
       return () => {
         clearInterval(interval);
       };
-    }, [activeRoom, drawerVisible, loadRooms, loadRoomMessages, loadActiveRoomMarkets]),
+    }, [
+      activeRoom,
+      drawerVisible,
+      loadRooms,
+      loadRoomMessages,
+      loadActiveRoomMarkets,
+    ]),
   );
 
   useEffect(() => {
@@ -675,7 +870,7 @@ export default function ChatsScreen() {
   function joinRoom(rawRoomName: string) {
     const normalized = normalizeRoomName(rawRoomName);
     if (!normalized) {
-      setError('Please enter a room name');
+      setError("Please enter a room name");
       return;
     }
 
@@ -697,7 +892,7 @@ export default function ChatsScreen() {
   function confirmCreateRoom() {
     const normalized = normalizeRoomName(createRoomNameDraft);
     if (!normalized) {
-      setError('Please add a room name before creating');
+      setError("Please add a room name before creating");
       return;
     }
 
@@ -708,7 +903,7 @@ export default function ChatsScreen() {
   function joinRoomFromDraft() {
     const normalized = normalizeRoomName(roomDraft);
     if (!normalized) {
-      setError('Type a room name to join');
+      setError("Type a room name to join");
       return;
     }
 
@@ -720,7 +915,7 @@ export default function ChatsScreen() {
     setActiveRoom(null);
     setDrawerVisible(false);
     setCreateModalVisible(false);
-    setActionModal({ visible: false, action: 'bet', market: null });
+    setActionModal({ visible: false, action: "bet", market: null });
     void loadRooms();
   }
 
@@ -731,7 +926,7 @@ export default function ChatsScreen() {
     }
 
     sendWs({ type: MSG.CHAT_MESSAGE, content });
-    setMessageDraft('');
+    setMessageDraft("");
   }
 
   function openDrawer() {
@@ -765,7 +960,56 @@ export default function ChatsScreen() {
     if (actionBusy) {
       return;
     }
-    setActionModal({ visible: false, action: 'bet', market: null });
+    setActionModal({ visible: false, action: "bet", market: null });
+  }
+
+  function setCreateDeadlineFromDate(next: Date) {
+    setCreateDeadlineInput(String(Math.trunc(next.getTime() / 1000)));
+  }
+
+  function openCreateMarketModal() {
+    const nowSeconds = Math.trunc(Date.now() / 1000);
+    const existing = parseDeadlineToUnix(createDeadlineInput);
+
+    if (!existing || Number(existing) <= nowSeconds) {
+      setCreateDeadlineInput(
+        String(nowSeconds + DEFAULT_CREATE_DEADLINE_SECONDS),
+      );
+    }
+
+    setError(null);
+    setCreateModalVisible(true);
+  }
+
+  function setCreateDeadlineHoursFromNow(hoursAhead: number) {
+    const next = new Date(Date.now() + hoursAhead * 60 * 60 * 1000);
+    setCreateDeadlineFromDate(next);
+  }
+
+  function setCreateDeadlineTomorrowAt(hour: number, minute: number) {
+    const next = new Date();
+    next.setDate(next.getDate() + 1);
+    next.setHours(hour, minute, 0, 0);
+    setCreateDeadlineFromDate(next);
+  }
+
+  function shiftCreateDeadlineByMinutes(minutesDelta: number) {
+    const fallback = new Date(
+      Date.now() + DEFAULT_CREATE_DEADLINE_SECONDS * 1000,
+    );
+    const base = createDeadlineDate ?? fallback;
+    const next = new Date(base.getTime() + minutesDelta * 60 * 1000);
+    setCreateDeadlineFromDate(next);
+  }
+
+  function shiftCreateDeadlineByDays(daysDelta: number) {
+    const fallback = new Date(
+      Date.now() + DEFAULT_CREATE_DEADLINE_SECONDS * 1000,
+    );
+    const base = createDeadlineDate ?? fallback;
+    const next = new Date(base);
+    next.setDate(next.getDate() + daysDelta);
+    setCreateDeadlineFromDate(next);
   }
 
   async function submitCreateMarket() {
@@ -775,33 +1019,40 @@ export default function ChatsScreen() {
 
     const title = toAsciiTitle(createTitle);
     if (!title) {
-      setError('Title is required (ASCII, max 31 chars)');
+      setError("Title is required (ASCII, max 31 chars)");
       return;
     }
 
     const deadlineUnix = parseDeadlineToUnix(createDeadlineInput);
     if (!deadlineUnix) {
-      setError('Enter deadline like 2026-05-20 18:30');
+      setError("Please pick a deadline");
       return;
     }
 
     if (Number(deadlineUnix) <= Math.trunc(Date.now() / 1000)) {
-      setError('Deadline must be in the future');
+      setError("Deadline must be in the future");
       return;
     }
 
     try {
       setCreateBusy(true);
       setError(null);
-      setStatus('Creating market...');
+      setStatus("Creating market...");
 
-      const marketCountResponse = await fetch(`${API_BASE_URL}/api/market-count`);
+      const marketCountResponse = await fetch(
+        `${API_BASE_URL}/api/market-count`,
+      );
       if (!marketCountResponse.ok) {
         throw new Error(await readErrorMessage(marketCountResponse));
       }
 
-      const marketCountPayload = (await marketCountResponse.json()) as { count?: string; raw?: string };
-      const beforeCount = BigInt(marketCountPayload.count ?? marketCountPayload.raw ?? '0');
+      const marketCountPayload = (await marketCountResponse.json()) as {
+        count?: string;
+        raw?: string;
+      };
+      const beforeCount = BigInt(
+        marketCountPayload.count ?? marketCountPayload.raw ?? "0",
+      );
       const inferredMarketId = beforeCount.toString();
 
       let externalMarketLinkId: string | undefined;
@@ -811,7 +1062,7 @@ export default function ChatsScreen() {
         const externalResponse = await fetch(
           `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(activeRoom)}/external-markets`,
           {
-            method: 'POST',
+            method: "POST",
             headers: await buildHeaders(),
             body: JSON.stringify({ url: trimmedExternalUrl }),
           },
@@ -829,7 +1080,7 @@ export default function ChatsScreen() {
       }
 
       const createResponse = await fetch(`${API_BASE_URL}/create-market`, {
-        method: 'POST',
+        method: "POST",
         headers: await buildHeaders(),
         body: JSON.stringify({
           title,
@@ -844,7 +1095,7 @@ export default function ChatsScreen() {
       const attachResponse = await fetch(
         `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(activeRoom)}/markets/attach`,
         {
-          method: 'POST',
+          method: "POST",
           headers: await buildHeaders(),
           body: JSON.stringify({
             marketId: inferredMarketId,
@@ -864,17 +1115,19 @@ export default function ChatsScreen() {
         content: `Created market #${inferredMarketId}: ${title}`,
       });
 
-      setCreateTitle('');
-      setCreateDeadlineInput('');
-      setCreatePolymarketUrl('');
+      setCreateTitle("");
+      setCreateDeadlineInput(
+        String(Math.trunc(Date.now() / 1000) + DEFAULT_CREATE_DEADLINE_SECONDS),
+      );
+      setCreatePolymarketUrl("");
       setCreateModalVisible(false);
       setStatus(`Market #${inferredMarketId} created`);
 
       await loadActiveRoomMarkets(activeRoom);
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : 'Create market failed';
-      setError(message);
-      setStatus('Create market failed');
+      console.error(createError);
+      setError("Create market failed. Please try again.");
+      setStatus("Create market failed");
     } finally {
       setCreateBusy(false);
     }
@@ -891,14 +1144,14 @@ export default function ChatsScreen() {
       setActionBusy(true);
       setError(null);
 
-      if (action === 'bet') {
+      if (action === "bet") {
         const amountWei = parseStrkToWei(betAmountStrk);
         if (!amountWei) {
-          throw new Error('Enter a valid STRK amount > 0');
+          throw new Error("Enter a valid STRK amount > 0");
         }
 
         const response = await fetch(`${API_BASE_URL}/place-bet`, {
-          method: 'POST',
+          method: "POST",
           headers: await buildHeaders(),
           body: JSON.stringify({
             marketId: market.marketId,
@@ -913,14 +1166,14 @@ export default function ChatsScreen() {
 
         sendWs({
           type: MSG.CHAT_MESSAGE,
-          content: `Placed ${betOutcomeYes ? 'YES' : 'NO'} bet on market #${market.marketId}`,
+          content: `Placed ${betOutcomeYes ? "YES" : "NO"} bet on market #${market.marketId}`,
         });
-        setStatus('Bet submitted');
+        setStatus("Bet submitted");
       }
 
-      if (action === 'resolve') {
+      if (action === "resolve") {
         const response = await fetch(`${API_BASE_URL}/resolve-market`, {
-          method: 'POST',
+          method: "POST",
           headers: await buildHeaders(),
           body: JSON.stringify({
             marketId: market.marketId,
@@ -934,14 +1187,14 @@ export default function ChatsScreen() {
 
         sendWs({
           type: MSG.CHAT_MESSAGE,
-          content: `Resolved market #${market.marketId} with ${resolveYes ? 'YES' : 'NO'} as winner`,
+          content: `Resolved market #${market.marketId} with ${resolveYes ? "YES" : "NO"} as winner`,
         });
-        setStatus('Market resolved');
+        setStatus("Market resolved");
       }
 
-      if (action === 'claim') {
+      if (action === "claim") {
         const response = await fetch(`${API_BASE_URL}/claim-winnings`, {
-          method: 'POST',
+          method: "POST",
           headers: await buildHeaders(),
           body: JSON.stringify({
             marketId: market.marketId,
@@ -956,7 +1209,24 @@ export default function ChatsScreen() {
           type: MSG.CHAT_MESSAGE,
           content: `Claimed winnings for market #${market.marketId}`,
         });
-        setStatus('Claim submitted');
+
+        claimedMarketIdsRef.current.add(String(market.marketId));
+        setActiveMarkets((previous) =>
+          previous.map((current) =>
+            current.marketId === market.marketId
+              ? {
+                  ...current,
+                  hasClaimed: true,
+                  canClaim: false,
+                  totalPool: "0",
+                  yesPool: "0",
+                  noPool: "0",
+                }
+              : current,
+          ),
+        );
+
+        setStatus("Claim submitted");
       }
 
       closeActionModal();
@@ -964,9 +1234,9 @@ export default function ChatsScreen() {
         await loadActiveRoomMarkets(activeRoom);
       }
     } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : 'Market action failed';
-      setError(message);
-      setStatus('Market action failed');
+      console.error(actionError);
+      setError("Market action failed. Please check context and try again.");
+      setStatus("Market action failed");
     } finally {
       setActionBusy(false);
     }
@@ -977,29 +1247,49 @@ export default function ChatsScreen() {
   }, [rooms]);
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
       {!activeRoom ? (
-        <View style={styles.roomListWrap}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.contentWrap}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingRooms}
+              onRefresh={() => {
+                void refreshRooms();
+              }}
+              tintColor="#08a844"
+            />
+          }
+        >
+          {/* ── Header ──────────────────────────── */}
           <View style={styles.topHeaderRow}>
-            <Text style={styles.screenTitle}>Chat</Text>
+            <View>
+              <Text style={styles.screenTitle}>Chats</Text>
+              <Text style={styles.screenSubtitle}>
+                {isConnected ? "Online" : "Connecting..."}
+              </Text>
+            </View>
             <Pressable
               style={styles.miniHeaderBtn}
               onPress={() => {
                 void refreshRooms();
-              }}>
-              <Ionicons name="refresh" size={20} color="#676b72" />
+              }}
+            >
+              <Ionicons name="refresh" size={ms(18)} color="#8e9196" />
             </Pressable>
           </View>
 
-          <Text style={styles.metaStatus}>Socket: {isConnected ? 'connected' : 'disconnected'}</Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+          {/* ── Search / Join ───────────────────── */}
           <View style={styles.searchRow}>
-            <Ionicons name="search-outline" size={23} color="#9b9ea4" />
+            <Ionicons name="search-outline" size={ms(18)} color="#9b9ea4" />
             <TextInput
               value={roomDraft}
               onChangeText={setRoomDraft}
-              placeholder="Type room name to join"
+              placeholder="Search or join a room..."
               placeholderTextColor="#9d9fa5"
               style={styles.searchInput}
               autoCapitalize="words"
@@ -1012,89 +1302,92 @@ export default function ChatsScreen() {
               style={styles.searchJoinBtn}
               onPress={() => {
                 joinRoomFromDraft();
-              }}>
-              <Ionicons name="arrow-forward" size={19} color="#f0f6f0" />
+              }}
+            >
+              <Ionicons name="arrow-forward" size={ms(16)} color="#fff" />
             </Pressable>
           </View>
 
-          <View style={styles.groupHeaderRow}>
-            <Text style={styles.groupHeaderTitle}>Your Chat Groups</Text>
-            <Ionicons name="ellipsis-horizontal" size={20} color="#bababa" />
-          </View>
-
-          <ScrollView
-            style={styles.groupsScroll}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshingRooms}
-                onRefresh={() => {
-                  void refreshRooms();
-                }}
-                tintColor={ONBOARDING_COLORS.greenDark}
-              />
-            }>
-            {sortedRooms.map((room, index) => (
-              <Pressable
-                key={room.roomName}
-                style={styles.groupCard}
-                onPress={() => {
-                  joinRoom(room.roomName);
-                }}>
-                <View style={styles.groupIconCircle}>
-                  <Ionicons
-                    name={ROOM_ICONS[index % ROOM_ICONS.length] as 'football-outline'}
-                    size={24}
-                    color="#f1f7f1"
-                  />
-                </View>
-
-                <View style={styles.groupMainCopy}>
-                  <Text style={styles.groupName}>{room.roomName}</Text>
-                  <Text style={styles.groupSubtitle}>{room.memberCount} members active</Text>
-                </View>
-
-                <Text style={styles.groupTime}>{formatRoomTime(room.createdAt)}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
+          {/* ── Create Room ─────────────────────── */}
           <Pressable
             style={styles.createRoomButton}
             onPress={() => {
               openCreateRoomPrompt();
-            }}>
-            <Ionicons name="add" size={28} color="#ecf8ec" />
+            }}
+          >
+            <Ionicons name="add" size={ms(22)} color="#fff" />
             <Text style={styles.createRoomLabel}>Create New Room</Text>
           </Pressable>
-        </View>
+
+          {/* ── Section Title ───────────────────── */}
+          <Text style={styles.sectionTitle}>Your Groups</Text>
+
+          {/* ── Room Cards ──────────────────────── */}
+          {sortedRooms.map((room, index) => (
+            <Pressable
+              key={room.roomName}
+              style={styles.groupCard}
+              onPress={() => {
+                joinRoom(room.roomName);
+              }}
+            >
+              <View style={styles.groupIconCircle}>
+                <Ionicons
+                  name={
+                    ROOM_ICONS[index % ROOM_ICONS.length] as "football-outline"
+                  }
+                  size={ms(20)}
+                  color="#fff"
+                />
+              </View>
+
+              <View style={styles.groupMainCopy}>
+                <Text style={styles.groupName}>{room.roomName}</Text>
+                <Text style={styles.groupSubtitle}>
+                  {room.memberCount} members active
+                </Text>
+              </View>
+
+              <Text style={styles.groupTime}>
+                {formatRoomTime(room.createdAt)}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       ) : (
         <View style={styles.chatWrap}>
+          {/* ── Chat Header ─────────────────────── */}
           <View style={styles.chatHeaderRow}>
-            <Pressable style={styles.headerIconBtn} onPress={openDrawer}>
-              <Ionicons name="arrow-forward" size={22} color="#53565b" />
+            <Pressable style={styles.headerIconBtn} onPress={backToRooms}>
+              <Ionicons name="arrow-back" size={ms(20)} color="#3f4349" />
             </Pressable>
 
-            <Text style={styles.chatTitle}>#{activeRoom}</Text>
+            <Text style={styles.chatTitle} numberOfLines={1}>
+              #{activeRoom}
+            </Text>
 
             <View style={styles.chatHeaderActions}>
               <Pressable
                 style={styles.headerIconBtn}
                 onPress={() => {
                   void refreshActiveRoom();
-                }}>
-                <Ionicons name="refresh" size={20} color="#53565b" />
+                }}
+              >
+                <Ionicons name="refresh" size={ms(18)} color="#3f4349" />
               </Pressable>
-              <Pressable style={styles.headerIconBtn} onPress={backToRooms}>
-                <Ionicons name="arrow-back" size={22} color="#53565b" />
+              <Pressable style={styles.headerIconBtn} onPress={openDrawer}>
+                <Ionicons
+                  name="stats-chart-outline"
+                  size={ms(18)}
+                  color="#3f4349"
+                />
               </Pressable>
             </View>
           </View>
 
-          <Text style={styles.metaStatus}>Status: {status}</Text>
-          <Text style={styles.metaStatus}>Client: {clientId ?? '-'}</Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+          {/* ── Messages ────────────────────────── */}
           <ScrollView
             ref={messageScrollRef}
             style={styles.messagesScroll}
@@ -1106,24 +1399,50 @@ export default function ChatsScreen() {
                 onRefresh={() => {
                   void refreshActiveRoom();
                 }}
-                tintColor={ONBOARDING_COLORS.greenDark}
+                tintColor="#08a844"
               />
-            }>
+            }
+          >
             {roomMessages.map((message) => {
-              const isMine = myUsername !== null && message.username === myUsername;
+              const isMine =
+                myUsername !== null && message.username === myUsername;
 
               return (
                 <View
                   key={message.id}
-                  style={[styles.messageRow, isMine ? styles.messageRowMine : styles.messageRowOther]}>
-                  <View style={[styles.messageBubble, isMine ? styles.mineBubble : styles.otherBubble]}>
-                    <Text style={[styles.messageUser, isMine ? styles.mineMetaText : styles.otherMetaText]}>
-                      {isMine ? 'You' : message.username}
+                  style={[
+                    styles.messageRow,
+                    isMine ? styles.messageRowMine : styles.messageRowOther,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      isMine ? styles.mineBubble : styles.otherBubble,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.messageUser,
+                        isMine ? styles.mineMetaText : styles.otherMetaText,
+                      ]}
+                    >
+                      {isMine ? "You" : message.username}
                     </Text>
-                    <Text style={[styles.messageText, isMine ? styles.mineText : styles.otherText]}>
+                    <Text
+                      style={[
+                        styles.messageText,
+                        isMine ? styles.mineText : styles.otherText,
+                      ]}
+                    >
                       {message.content}
                     </Text>
-                    <Text style={[styles.messageTime, isMine ? styles.mineMetaText : styles.otherMetaText]}>
+                    <Text
+                      style={[
+                        styles.messageTime,
+                        isMine ? styles.mineMetaText : styles.otherMetaText,
+                      ]}
+                    >
                       {formatMessageTime(message.timestamp)}
                     </Text>
                   </View>
@@ -1132,28 +1451,34 @@ export default function ChatsScreen() {
             })}
           </ScrollView>
 
+          {/* ── Composer ────────────────────────── */}
           <View style={styles.composerRow}>
-            <Pressable style={styles.plusBtn} onPress={() => setCreateModalVisible(true)}>
-              <Ionicons name="add" size={24} color="#f0f7f0" />
+            <Pressable style={styles.plusBtn} onPress={openCreateMarketModal}>
+              <Ionicons name="add" size={ms(24)} color="#8e9196" />
             </Pressable>
 
             <TextInput
               value={messageDraft}
               onChangeText={setMessageDraft}
-              placeholder="Write a message..."
-              placeholderTextColor="#9d9fa5"
+              placeholder="Message..."
+              placeholderTextColor="#a5a8ad"
               style={styles.messageInput}
               autoCorrect={false}
             />
 
             <Pressable style={styles.sendBtn} onPress={sendRoomMessage}>
-              <Ionicons name="send" size={20} color="#f3f9f3" />
+              <Ionicons name="send" size={ms(18)} color="#fff" />
             </Pressable>
           </View>
         </View>
       )}
 
-      <Modal visible={drawerVisible} transparent animationType="none" onRequestClose={closeDrawer}>
+      <Modal
+        visible={drawerVisible}
+        transparent
+        animationType="none"
+        onRequestClose={closeDrawer}
+      >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeDrawer} />
           <Animated.View
@@ -1163,22 +1488,26 @@ export default function ChatsScreen() {
                 width: drawerWidth,
                 transform: [{ translateX: drawerTranslateX }],
               },
-            ]}>
+            ]}
+          >
             <View style={styles.drawerHeaderRow}>
               <Pressable style={styles.headerIconBtn} onPress={closeDrawer}>
-                <Ionicons name="arrow-back" size={22} color="#f0f0f0" />
+                <Ionicons name="arrow-back" size={ms(22)} color="#f0f0f0" />
               </Pressable>
               <Text style={styles.drawerTitle}>Room Markets</Text>
               <Pressable
                 style={styles.drawerRefreshBtn}
                 onPress={() => {
                   void refreshMarkets();
-                }}>
-                <Ionicons name="refresh" size={18} color="#eaf1ff" />
+                }}
+              >
+                <Ionicons name="refresh" size={ms(18)} color="#eaf1ff" />
               </Pressable>
             </View>
 
-            <Text style={styles.drawerSubtext}>All markets in this chat are shown with their current stage.</Text>
+            <Text style={styles.drawerSubtext}>
+              All markets in this chat are shown with their current stage.
+            </Text>
 
             <ScrollView
               style={styles.drawerScroll}
@@ -1191,10 +1520,13 @@ export default function ChatsScreen() {
                   }}
                   tintColor="#a8bfde"
                 />
-              }>
+              }
+            >
               {activeMarkets.length === 0 ? (
                 <View style={styles.drawerEmptyCard}>
-                  <Text style={styles.drawerEmptyText}>No markets in this chat yet.</Text>
+                  <Text style={styles.drawerEmptyText}>
+                    No markets in this chat yet.
+                  </Text>
                 </View>
               ) : (
                 activeMarkets.map((market) => (
@@ -1205,45 +1537,80 @@ export default function ChatsScreen() {
                         <Text
                           style={[
                             styles.marketStageBadge,
-                            market.resolved ? styles.marketStageResolvedBadge : styles.marketStageOpenBadge,
-                          ]}>
+                            market.resolved
+                              ? styles.marketStageResolvedBadge
+                              : styles.marketStageOpenBadge,
+                          ]}
+                        >
                           {marketStageLabel(market)}
                         </Text>
-                        {market.isMine ? <Text style={styles.mineBadge}>Mine</Text> : null}
+                        {market.isMine ? (
+                          <Text style={styles.mineBadge}>Mine</Text>
+                        ) : null}
                       </View>
                     </View>
 
-                    <Text style={styles.marketMeta}>Market #{market.marketId}</Text>
-                    <Text style={styles.marketMeta}>Creator: {market.creator}</Text>
-                    <Text style={styles.marketMeta}>Deadline: {formatDeadline(market.deadlineUnix)}</Text>
-                    <Text style={styles.marketMeta}>Total Pool: {market.totalPool}</Text>
+                    <Text style={styles.marketMeta}>
+                      Market #{market.marketId}
+                    </Text>
+                    <Text style={styles.marketMeta}>
+                      Creator: {market.creator}
+                    </Text>
+                    <Text style={styles.marketMeta}>
+                      Deadline: {formatDeadline(market.deadlineUnix)}
+                    </Text>
+                    <Text style={styles.marketMeta}>
+                      Total Pool: {formatPoolAsStrk(market.totalPool)}
+                    </Text>
                     {market.resolved ? (
                       <Text style={styles.marketMeta}>
-                        Winning Outcome:{' '}
-                        {market.winningOutcome === null ? 'Unavailable' : market.winningOutcome ? 'YES' : 'NO'}
+                        Winning Outcome:{" "}
+                        {market.winningOutcome === null
+                          ? "Unavailable"
+                          : market.winningOutcome
+                            ? "YES"
+                            : "NO"}
                       </Text>
                     ) : null}
-                    {market.hasPlacedBet ? <Text style={styles.placedBetBadge}>Bet placed</Text> : null}
+                    {market.hasPlacedBet ? (
+                      <Text style={styles.placedBetBadge}>Bet placed</Text>
+                    ) : null}
+                    {market.hasClaimed ? (
+                      <Text style={styles.claimedBadge}>Claimed</Text>
+                    ) : null}
 
                     <View style={styles.marketActionRow}>
                       {!market.resolved ? (
-                        <Pressable style={styles.marketActionBtn} onPress={() => openActionModal('bet', market)}>
-                          <Text style={styles.marketActionLabel}>Place Bet</Text>
+                        <Pressable
+                          style={styles.marketActionBtn}
+                          onPress={() => openActionModal("bet", market)}
+                        >
+                          <Text style={styles.marketActionLabel}>
+                            Place Bet
+                          </Text>
                         </Pressable>
                       ) : null}
 
                       {market.canResolve && !market.resolved ? (
                         <Pressable
-                          style={[styles.marketActionBtn, styles.marketActionResolveBtn]}
-                          onPress={() => openActionModal('resolve', market)}>
+                          style={[
+                            styles.marketActionBtn,
+                            styles.marketActionResolveBtn,
+                          ]}
+                          onPress={() => openActionModal("resolve", market)}
+                        >
                           <Text style={styles.marketActionLabel}>Resolve</Text>
                         </Pressable>
                       ) : null}
 
-                      {market.resolved ? (
+                      {market.canClaim ? (
                         <Pressable
-                          style={[styles.marketActionBtn, styles.marketActionClaimBtn]}
-                          onPress={() => openActionModal('claim', market)}>
+                          style={[
+                            styles.marketActionBtn,
+                            styles.marketActionClaimBtn,
+                          ]}
+                          onPress={() => openActionModal("claim", market)}
+                        >
                           <Text style={styles.marketActionLabel}>Claim</Text>
                         </Pressable>
                       ) : null}
@@ -1260,11 +1627,14 @@ export default function ChatsScreen() {
         visible={createRoomModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setCreateRoomModalVisible(false)}>
+        onRequestClose={() => setCreateRoomModalVisible(false)}
+      >
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalCard}>
             <Text style={styles.centerModalTitle}>Name your room</Text>
-            <Text style={styles.modalInfoText}>Choose a clear room name for your group.</Text>
+            <Text style={styles.modalInfoText}>
+              Choose a clear room name for your group.
+            </Text>
 
             <TextInput
               value={createRoomNameDraft}
@@ -1280,13 +1650,15 @@ export default function ChatsScreen() {
             <View style={styles.modalButtonRow}>
               <Pressable
                 style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setCreateRoomModalVisible(false)}>
+                onPress={() => setCreateRoomModalVisible(false)}
+              >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
 
               <Pressable
                 style={[styles.modalButton, styles.modalConfirmButton]}
-                onPress={confirmCreateRoom}>
+                onPress={confirmCreateRoom}
+              >
                 <Text style={styles.modalConfirmText}>Create Room</Text>
               </Pressable>
             </View>
@@ -1302,89 +1674,198 @@ export default function ChatsScreen() {
           if (!createBusy) {
             setCreateModalVisible(false);
           }
-        }}>
-        <View style={styles.centerModalOverlay}>
-          <View style={styles.centerModalCard}>
-            <Text style={styles.centerModalTitle}>Create Room Market</Text>
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.createMarketOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? hp(24) : 0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.createMarketOverlayContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.centerModalCard, styles.createMarketCard]}>
+              <View style={styles.createMarketHeaderRow}>
+                <View style={styles.createMarketIconWrap}>
+                  <Ionicons
+                    name="sparkles-outline"
+                    size={ms(18)}
+                    color="#1f8f4b"
+                  />
+                </View>
+                <View style={styles.createMarketHeaderCopy}>
+                  <Text style={styles.centerModalTitle}>
+                    Create Room Market
+                  </Text>
+                  <Text style={styles.modalInfoText}>
+                    Ask one clear question and set a deadline with taps.
+                  </Text>
+                </View>
+              </View>
 
-            <TextInput
-              value={createTitle}
-              onChangeText={setCreateTitle}
-              placeholder="Market title"
-              placeholderTextColor="#9ea1a7"
-              style={styles.modalInput}
-            />
+              <Text style={styles.modalFieldLabel}>Market title</Text>
 
-            <TextInput
-              value={createDeadlineInput}
-              onChangeText={setCreateDeadlineInput}
-              placeholder="Deadline (e.g. 2026-05-20 18:30)"
-              placeholderTextColor="#9ea1a7"
-              style={styles.modalInput}
-            />
+              <TextInput
+                value={createTitle}
+                onChangeText={setCreateTitle}
+                placeholder="Market title"
+                placeholderTextColor="#9ea1a7"
+                style={[styles.modalInput, styles.createMarketInput]}
+                autoCapitalize="sentences"
+                autoCorrect={false}
+              />
 
-            <Text style={styles.modalInfoText}>Uses your local time. Unix timestamps also work.</Text>
+              <View style={styles.deadlineCard}>
+                <View style={styles.deadlineTopRow}>
+                  <Text style={styles.modalFieldLabel}>Deadline</Text>
+                  <Text style={styles.deadlineTimezoneBadge}>Local time</Text>
+                </View>
 
-            <TextInput
-              value={createPolymarketUrl}
-              onChangeText={setCreatePolymarketUrl}
-              placeholder="Polymarket URL (optional)"
-              placeholderTextColor="#9ea1a7"
-              style={styles.modalInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+                <Text style={styles.deadlineValue}>{createDeadlineLabel}</Text>
+                <Text style={styles.deadlineHint}>{createDeadlineHint}</Text>
 
-            <View style={styles.modalButtonRow}>
-              <Pressable
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => {
-                  if (!createBusy) {
-                    setCreateModalVisible(false);
-                  }
-                }}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </Pressable>
+                <View style={styles.deadlineQuickRow}>
+                  <Pressable
+                    style={styles.deadlineQuickChip}
+                    onPress={() => setCreateDeadlineHoursFromNow(1)}
+                  >
+                    <Text style={styles.deadlineQuickChipText}>+1 hour</Text>
+                  </Pressable>
 
-              <Pressable
-                style={[styles.modalButton, styles.modalConfirmButton, createBusy ? styles.buttonDisabled : undefined]}
-                disabled={createBusy}
-                onPress={() => {
-                  void submitCreateMarket();
-                }}>
-                <Text style={styles.modalConfirmText}>{createBusy ? 'Creating...' : 'Create Market'}</Text>
-              </Pressable>
+                  <Pressable
+                    style={styles.deadlineQuickChip}
+                    onPress={() => setCreateDeadlineHoursFromNow(6)}
+                  >
+                    <Text style={styles.deadlineQuickChipText}>+6 hours</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deadlineQuickChip}
+                    onPress={() => setCreateDeadlineTomorrowAt(21, 0)}
+                  >
+                    <Text style={styles.deadlineQuickChipText}>
+                      Tomorrow 9:00 PM
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deadlineQuickChip}
+                    onPress={() => shiftCreateDeadlineByDays(3)}
+                  >
+                    <Text style={styles.deadlineQuickChipText}>+3 days</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.deadlineAdjustRow}>
+                  <Pressable
+                    style={styles.deadlineAdjustBtn}
+                    onPress={() => shiftCreateDeadlineByMinutes(-30)}
+                  >
+                    <Text style={styles.deadlineAdjustBtnText}>-30 min</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deadlineAdjustBtn}
+                    onPress={() => shiftCreateDeadlineByMinutes(30)}
+                  >
+                    <Text style={styles.deadlineAdjustBtnText}>+30 min</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.deadlineAdjustRow}>
+                  <Pressable
+                    style={styles.deadlineAdjustBtn}
+                    onPress={() => shiftCreateDeadlineByDays(-1)}
+                  >
+                    <Text style={styles.deadlineAdjustBtnText}>-1 day</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deadlineAdjustBtn}
+                    onPress={() => shiftCreateDeadlineByDays(1)}
+                  >
+                    <Text style={styles.deadlineAdjustBtnText}>+1 day</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/*
+              Polymarket URL input is intentionally hidden from the UI for now.
+              Keep createPolymarketUrl state and submit wiring for future re-enable.
+            */}
+
+              <View style={styles.modalButtonRow}>
+                <Pressable
+                  style={[styles.modalButton, styles.modalCancelButton]}
+                  onPress={() => {
+                    if (!createBusy) {
+                      setCreateModalVisible(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    styles.modalConfirmButton,
+                    createBusy ? styles.buttonDisabled : undefined,
+                  ]}
+                  disabled={createBusy}
+                  onPress={() => {
+                    void submitCreateMarket();
+                  }}
+                >
+                  <Text style={styles.modalConfirmText}>
+                    {createBusy ? "Creating..." : "Create Market"}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
         visible={actionModal.visible}
         transparent
         animationType="fade"
-        onRequestClose={closeActionModal}>
+        onRequestClose={closeActionModal}
+      >
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalCard}>
             <Text style={styles.centerModalTitle}>
-              {actionModal.action === 'bet' && 'Place Bet'}
-              {actionModal.action === 'resolve' && 'Resolve Market'}
-              {actionModal.action === 'claim' && 'Claim Winnings'}
+              {actionModal.action === "bet" && "Place Bet"}
+              {actionModal.action === "resolve" && "Resolve Market"}
+              {actionModal.action === "claim" && "Claim Winnings"}
             </Text>
 
-            <Text style={styles.modalInfoText}>Market #{actionModal.market?.marketId ?? '-'}</Text>
+            <Text style={styles.modalInfoText}>
+              Market #{actionModal.market?.marketId ?? "-"}
+            </Text>
 
-            {actionModal.action === 'bet' ? (
+            {actionModal.action === "bet" ? (
               <>
                 <View style={styles.modalToggleRow}>
                   <Pressable
-                    style={[styles.modalToggle, betOutcomeYes ? styles.modalToggleActive : undefined]}
-                    onPress={() => setBetOutcomeYes(true)}>
+                    style={[
+                      styles.modalToggle,
+                      betOutcomeYes ? styles.modalToggleActive : undefined,
+                    ]}
+                    onPress={() => setBetOutcomeYes(true)}
+                  >
                     <Text style={styles.modalToggleText}>YES</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.modalToggle, !betOutcomeYes ? styles.modalToggleActive : undefined]}
-                    onPress={() => setBetOutcomeYes(false)}>
+                    style={[
+                      styles.modalToggle,
+                      !betOutcomeYes ? styles.modalToggleActive : undefined,
+                    ]}
+                    onPress={() => setBetOutcomeYes(false)}
+                  >
                     <Text style={styles.modalToggleText}>NO</Text>
                   </Pressable>
                 </View>
@@ -1400,16 +1881,24 @@ export default function ChatsScreen() {
               </>
             ) : null}
 
-            {actionModal.action === 'resolve' ? (
+            {actionModal.action === "resolve" ? (
               <View style={styles.modalToggleRow}>
                 <Pressable
-                  style={[styles.modalToggle, resolveYes ? styles.modalToggleActive : undefined]}
-                  onPress={() => setResolveYes(true)}>
+                  style={[
+                    styles.modalToggle,
+                    resolveYes ? styles.modalToggleActive : undefined,
+                  ]}
+                  onPress={() => setResolveYes(true)}
+                >
                   <Text style={styles.modalToggleText}>WIN YES</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.modalToggle, !resolveYes ? styles.modalToggleActive : undefined]}
-                  onPress={() => setResolveYes(false)}>
+                  style={[
+                    styles.modalToggle,
+                    !resolveYes ? styles.modalToggleActive : undefined,
+                  ]}
+                  onPress={() => setResolveYes(false)}
+                >
                   <Text style={styles.modalToggleText}>WIN NO</Text>
                 </Pressable>
               </View>
@@ -1418,526 +1907,718 @@ export default function ChatsScreen() {
             <View style={styles.modalButtonRow}>
               <Pressable
                 style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={closeActionModal}>
+                onPress={closeActionModal}
+              >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
 
               <Pressable
-                style={[styles.modalButton, styles.modalConfirmButton, actionBusy ? styles.buttonDisabled : undefined]}
+                style={[
+                  styles.modalButton,
+                  styles.modalConfirmButton,
+                  actionBusy ? styles.buttonDisabled : undefined,
+                ]}
                 disabled={actionBusy}
                 onPress={() => {
                   void submitMarketAction();
-                }}>
-                <Text style={styles.modalConfirmText}>{actionBusy ? 'Submitting...' : 'Confirm'}</Text>
+                }}
+              >
+                <Text style={styles.modalConfirmText}>
+                  {actionBusy ? "Submitting..." : "Confirm"}
+                </Text>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  /* ── scaffold ──────────────────────────────────────────── */
   screen: {
     flex: 1,
-    backgroundColor: ONBOARDING_COLORS.background,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 12,
+    backgroundColor: "#faf9f7",
   },
-  roomListWrap: {
+  scroll: {
     flex: 1,
-    borderRadius: 36,
-    borderWidth: 1,
-    borderColor: '#dddddd',
-    backgroundColor: ONBOARDING_COLORS.card,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    overflow: 'hidden',
   },
+  contentWrap: {
+    paddingHorizontal: wp(20),
+    paddingTop: hp(8),
+    paddingBottom: hp(100),
+    gap: hp(16),
+  },
+
+  /* ── header ────────────────────────────────────────────── */
   topHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginTop: hp(4),
   },
   screenTitle: {
-    color: '#1f2227',
-    fontSize: 44 / 2,
-    fontWeight: '800',
+    color: "#1a1d22",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(28),
+    letterSpacing: -0.3,
+  },
+  screenSubtitle: {
+    color: "#8e9196",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(14),
+    marginTop: hp(2),
   },
   miniHeaderBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ececec',
+    width: wp(36),
+    height: wp(36),
+    borderRadius: wp(18),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    marginTop: hp(6),
   },
+
+  /* ── search ────────────────────────────────────────────── */
   searchRow: {
-    minHeight: 56,
-    borderRadius: 28,
+    height: hp(50),
+    borderRadius: wp(16),
     borderWidth: 1,
-    borderColor: '#d7d7d7',
-    backgroundColor: '#f7f7f7',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    borderColor: "#e8e8e8",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: wp(14),
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(10),
   },
   searchInput: {
     flex: 1,
-    color: '#23262a',
-    fontSize: 18,
+    color: "#1a1d22",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(15),
   },
   searchJoinBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: ONBOARDING_COLORS.greenDark,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: wp(30),
+    height: wp(30),
+    borderRadius: wp(15),
+    backgroundColor: "#2daa57",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  groupHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+
+  /* ── section ───────────────────────────────────────────── */
+  sectionTitle: {
+    color: "#1e2126",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(18),
+    letterSpacing: -0.15,
+    marginTop: hp(4),
   },
-  groupHeaderTitle: {
-    color: '#23262a',
-    fontSize: 38 / 2,
-    fontWeight: '700',
-  },
-  groupsScroll: {
-    flex: 1,
-  },
+
+  /* ── group cards ───────────────────────────────────────── */
   groupCard: {
-    minHeight: 96,
-    borderRadius: 20,
+    borderRadius: wp(18),
     borderWidth: 1,
-    borderColor: '#dddddd',
-    backgroundColor: '#f7f7f7',
-    paddingHorizontal: 14,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderColor: "#ebebeb",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(14),
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(14),
   },
   groupIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: ONBOARDING_COLORS.green,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: wp(46),
+    height: wp(46),
+    borderRadius: wp(23),
+    backgroundColor: "#2daa57",
+    alignItems: "center",
+    justifyContent: "center",
   },
   groupMainCopy: {
     flex: 1,
-    gap: 2,
+    gap: hp(2),
   },
   groupName: {
-    color: '#21242a',
-    fontSize: 34 / 2,
-    fontWeight: '700',
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(16),
   },
   groupSubtitle: {
-    color: '#6f737b',
-    fontSize: 16,
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(13),
   },
   groupTime: {
-    color: '#6f737b',
-    fontSize: 15,
-    fontWeight: '500',
+    color: "#a5a8ad",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(12),
   },
+
+  /* ── create room ───────────────────────────────────────── */
   createRoomButton: {
-    minHeight: 66,
-    borderRadius: 33,
-    marginTop: 8,
-    backgroundColor: ONBOARDING_COLORS.greenDark,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
+    height: hp(54),
+    borderRadius: wp(16),
+    backgroundColor: "#2daa57",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: wp(8),
+    shadowColor: "#1b7a39",
+    shadowOpacity: 0.14,
     shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
   createRoomLabel: {
-    color: '#eff8ef',
-    fontSize: 36 / 2,
-    fontWeight: '700',
+    color: "#ffffff",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(16),
   },
+
+  /* ── chat view ─────────────────────────────────────────── */
   chatWrap: {
     flex: 1,
-    borderRadius: 36,
-    borderWidth: 1,
-    borderColor: '#dddddd',
-    backgroundColor: ONBOARDING_COLORS.card,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 12,
-    overflow: 'hidden',
+    backgroundColor: "#faf9f7",
+    paddingTop: hp(4),
   },
   chatHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: wp(20),
+    paddingBottom: hp(12),
+    borderBottomWidth: 1,
+    borderBottomColor: "#ebebeb",
   },
   chatHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(6),
   },
   headerIconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ececec',
+    width: wp(36),
+    height: wp(36),
+    borderRadius: wp(18),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f0ee",
   },
   chatTitle: {
-    color: '#21242a',
-    fontSize: 36 / 2,
-    fontWeight: '800',
-    maxWidth: '56%',
+    flex: 1,
+    textAlign: "center",
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(18),
+    letterSpacing: -0.2,
   },
+
+  /* ── meta / error ──────────────────────────────────────── */
   metaStatus: {
-    color: '#848991',
-    fontSize: 13,
-    marginBottom: 4,
+    color: "#a5a8ad",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(12),
+    paddingHorizontal: wp(20),
+    marginTop: hp(4),
   },
   errorText: {
-    color: '#c34848',
-    fontSize: 13,
-    marginBottom: 6,
+    color: "#c34635",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(12),
+    paddingHorizontal: wp(20),
+    marginBottom: hp(4),
   },
+
+  /* ── messages ──────────────────────────────────────────── */
   messagesScroll: {
     flex: 1,
   },
   messagesContent: {
-    paddingTop: 6,
-    paddingBottom: 12,
-    gap: 8,
+    paddingHorizontal: wp(16),
+    paddingTop: hp(10),
+    paddingBottom: hp(16),
+    gap: hp(6),
   },
   messageRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
+    alignItems: "flex-end",
   },
   messageRowMine: {
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
   },
   messageRowOther: {
-    justifyContent: 'flex-start',
+    justifyContent: "flex-start",
   },
   messageBubble: {
-    maxWidth: '84%',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
+    maxWidth: "78%",
+    paddingHorizontal: wp(14),
+    paddingVertical: hp(10),
+    gap: hp(2),
   },
   mineBubble: {
-    backgroundColor: '#1f2836',
+    backgroundColor: "#2daa57",
+    borderTopLeftRadius: wp(18),
+    borderBottomLeftRadius: wp(18),
+    borderBottomRightRadius: wp(4),
+    borderTopRightRadius: wp(18),
   },
   otherBubble: {
-    backgroundColor: '#8ed089',
+    backgroundColor: "#ffffff",
+    borderTopRightRadius: wp(18),
+    borderBottomRightRadius: wp(18),
+    borderBottomLeftRadius: wp(4),
+    borderTopLeftRadius: wp(18),
+    borderWidth: 1,
+    borderColor: "#ebebeb",
   },
   messageUser: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(11),
   },
   mineMetaText: {
-    color: '#d7dee9',
+    color: "rgba(255,255,255,0.65)",
   },
   otherMetaText: {
-    color: '#265125',
+    color: "#a5a8ad",
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '500',
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(15),
+    lineHeight: ms(21),
   },
   mineText: {
-    color: '#f0f5ff',
+    color: "#ffffff",
   },
   otherText: {
-    color: '#183f1d',
+    color: "#1c1f24",
   },
   messageTime: {
-    fontSize: 11,
-    fontWeight: '500',
-    alignSelf: 'flex-end',
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(10),
+    alignSelf: "flex-end",
+    marginTop: hp(2),
   },
+
+  /* ── composer ──────────────────────────────────────────── */
   composerRow: {
-    minHeight: 58,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#d7d7d7',
-    backgroundColor: '#f7f7f7',
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(8),
+    paddingHorizontal: wp(16),
+    paddingVertical: hp(10),
+    borderTopWidth: 1,
+    borderTopColor: "#ebebeb",
+    backgroundColor: "#faf9f7",
   },
   plusBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2b3b5a',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: wp(36),
+    height: wp(36),
+    borderRadius: wp(18),
+    alignItems: "center",
+    justifyContent: "center",
   },
   messageInput: {
     flex: 1,
-    color: '#22252a',
-    fontSize: 16,
+    height: hp(44),
+    borderRadius: wp(22),
+    backgroundColor: "#ffffff",
+    paddingHorizontal: wp(16),
+    color: "#1c1f24",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(15),
+    borderWidth: 1,
+    borderColor: "#e8e8e8",
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: ONBOARDING_COLORS.greenDark,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: wp(40),
+    height: wp(40),
+    borderRadius: wp(20),
+    backgroundColor: "#2daa57",
+    alignItems: "center",
+    justifyContent: "center",
   },
+
+  /* ── drawer ────────────────────────────────────────────── */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.24)',
-    justifyContent: 'flex-start',
+    backgroundColor: "rgba(0,0,0,0.24)",
+    justifyContent: "flex-start",
   },
   drawerPanel: {
     flex: 1,
-    backgroundColor: '#162033',
-    paddingHorizontal: 14,
-    paddingTop: 18,
-    paddingBottom: 14,
+    backgroundColor: "#0c0f14",
+    paddingHorizontal: wp(16),
+    paddingTop: hp(20),
+    paddingBottom: hp(14),
   },
   drawerHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: hp(8),
   },
   drawerTitle: {
     flex: 1,
-    marginLeft: 10,
-    color: '#eef3ff',
-    fontSize: 22,
-    fontWeight: '800',
+    marginLeft: wp(12),
+    color: "#ffffff",
+    fontSize: ms(22),
+    fontWeight: "800",
   },
   drawerRefreshBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2a3a53',
+    width: wp(34),
+    height: wp(34),
+    borderRadius: wp(17),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1b232e",
   },
   drawerSubtext: {
-    color: '#9eb2d0',
-    fontSize: 13,
-    marginBottom: 10,
+    color: "#828d9c",
+    fontSize: ms(12),
+    marginBottom: hp(16),
   },
   drawerScroll: {
     flex: 1,
   },
   drawerEmptyCard: {
-    borderRadius: 14,
+    borderRadius: wp(16),
     borderWidth: 1,
-    borderColor: '#334560',
-    backgroundColor: '#1f2c44',
-    minHeight: 78,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
+    borderColor: "#242a35",
+    backgroundColor: "#151921",
+    minHeight: hp(90),
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: wp(12),
   },
   drawerEmptyText: {
-    color: '#b5c5de',
-    fontSize: 14,
+    color: "#7b8798",
+    fontSize: ms(14),
   },
   marketCard: {
-    borderRadius: 14,
+    borderRadius: wp(18),
     borderWidth: 1,
-    borderColor: '#334560',
-    backgroundColor: '#1f2c44',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    marginBottom: 10,
-    gap: 4,
+    borderColor: "#1e242f",
+    backgroundColor: "#12161c",
+    paddingHorizontal: wp(14),
+    paddingVertical: hp(14),
+    marginBottom: hp(12),
+    gap: hp(6),
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
   },
   marketTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: wp(12),
+    borderBottomWidth: 1,
+    borderBottomColor: "#1d232e",
+    paddingBottom: hp(10),
+    marginBottom: hp(6),
   },
   marketBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(6),
+    marginTop: hp(2),
   },
   marketTitle: {
     flex: 1,
-    color: '#ecf3ff',
-    fontSize: 16,
-    fontWeight: '700',
+    color: "#ffffff",
+    fontSize: ms(16),
+    fontWeight: "700",
+    lineHeight: ms(22),
   },
   marketStageBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    fontSize: ms(10),
+    fontWeight: "800",
+    textTransform: "uppercase",
+    borderRadius: wp(6),
+    paddingHorizontal: wp(6),
+    paddingVertical: hp(4),
   },
   marketStageOpenBadge: {
-    color: '#1f2f44',
-    backgroundColor: '#9bc0ff',
+    color: "#e4ebf5",
+    backgroundColor: "#3b82f6",
   },
   marketStageResolvedBadge: {
-    color: '#14321e',
-    backgroundColor: '#89d8a1',
+    color: "#1a3c28",
+    backgroundColor: "#4ade80",
   },
   mineBadge: {
-    color: '#1f2d1f',
-    backgroundColor: '#96d38f',
-    fontSize: 11,
-    fontWeight: '700',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    color: "#1e293b",
+    backgroundColor: "#cbd5e1",
+    fontSize: ms(10),
+    fontWeight: "800",
+    textTransform: "uppercase",
+    borderRadius: wp(6),
+    paddingHorizontal: wp(6),
+    paddingVertical: hp(4),
   },
   marketMeta: {
-    color: '#aac0de',
-    fontSize: 12,
+    color: "#94a3b8",
+    fontSize: ms(12),
+    fontWeight: "500",
   },
   placedBetBadge: {
-    color: '#1f2d1f',
-    backgroundColor: '#ffc868',
-    fontSize: 11,
-    fontWeight: '700',
-    borderRadius: 999,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginTop: 3,
+    color: "#854d0e",
+    backgroundColor: "#fef08a",
+    fontSize: ms(11),
+    fontWeight: "800",
+    borderRadius: wp(6),
+    alignSelf: "flex-start",
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(4),
+    marginTop: hp(6),
+  },
+  claimedBadge: {
+    color: "#14532d",
+    backgroundColor: "#bbf7d0",
+    fontSize: ms(11),
+    fontWeight: "800",
+    borderRadius: wp(6),
+    alignSelf: "flex-start",
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(4),
+    marginTop: hp(6),
   },
   marketActionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 6,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: wp(10),
+    marginTop: hp(10),
   },
   marketActionBtn: {
-    borderRadius: 11,
-    backgroundColor: '#2f7dd8',
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    borderRadius: wp(12),
+    backgroundColor: "#2563eb",
+    paddingHorizontal: wp(14),
+    paddingVertical: hp(10),
+    minWidth: wp(80),
+    alignItems: "center",
   },
   marketActionResolveBtn: {
-    backgroundColor: '#76994f',
+    backgroundColor: "#16a34a",
   },
   marketActionClaimBtn: {
-    backgroundColor: '#5f6ad0',
+    backgroundColor: "#7c3aed",
   },
   marketActionLabel: {
-    color: '#f1f6ff',
-    fontSize: 12,
-    fontWeight: '700',
+    color: "#ffffff",
+    fontSize: ms(13),
+    fontWeight: "800",
   },
+
+  /* ── modals ────────────────────────────────────────────── */
   centerModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.28)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 22,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: wp(22),
+  },
+  createMarketOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  createMarketOverlayContent: {
+    flexGrow: 1,
+    justifyContent: "flex-start",
+    paddingHorizontal: wp(22),
+    paddingTop: hp(44),
+    paddingBottom: hp(18),
   },
   centerModalCard: {
-    width: '100%',
-    borderRadius: 18,
+    width: "100%",
+    borderRadius: wp(22),
     borderWidth: 1,
-    borderColor: '#d8d8d8',
-    backgroundColor: '#f7f7f7',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 10,
+    borderColor: "#e8e8e8",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: wp(18),
+    paddingVertical: hp(18),
+    gap: hp(12),
+  },
+  createMarketCard: {
+    borderColor: "#d6e9dc",
+    backgroundColor: "#fcfffd",
+    shadowColor: "#13311f",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  createMarketHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(10),
+  },
+  createMarketIconWrap: {
+    width: wp(36),
+    height: wp(36),
+    borderRadius: wp(18),
+    backgroundColor: "#e7f6ed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createMarketHeaderCopy: {
+    flex: 1,
+    gap: hp(2),
   },
   centerModalTitle: {
-    color: '#202328',
-    fontSize: 20,
-    fontWeight: '800',
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(20),
   },
   modalInfoText: {
-    color: '#5a5f66',
-    fontSize: 13,
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(13),
+  },
+  modalFieldLabel: {
+    color: "#1f2937",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(13),
   },
   modalInput: {
-    minHeight: 48,
-    borderRadius: 12,
+    minHeight: hp(48),
+    borderRadius: wp(14),
     borderWidth: 1,
-    borderColor: '#d1d1d1',
-    backgroundColor: '#f2f2f2',
-    paddingHorizontal: 12,
-    color: '#21242a',
-    fontSize: 15,
+    borderColor: "#e8e8e8",
+    backgroundColor: "#faf9f7",
+    paddingHorizontal: wp(14),
+    color: "#1c1f24",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(15),
+  },
+  createMarketInput: {
+    borderColor: "#dce8df",
+    backgroundColor: "#ffffff",
+  },
+  deadlineCard: {
+    borderRadius: wp(16),
+    borderWidth: 1,
+    borderColor: "#d8e8dc",
+    backgroundColor: "#f5fbf7",
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(12),
+    gap: hp(8),
+  },
+  deadlineTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  deadlineTimezoneBadge: {
+    color: "#17643a",
+    backgroundColor: "#ddf5e7",
+    borderRadius: wp(8),
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(3),
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(10),
+    textTransform: "uppercase",
+  },
+  deadlineValue: {
+    color: "#13251a",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(16),
+  },
+  deadlineHint: {
+    color: "#5e7063",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(12),
+  },
+  deadlineQuickRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: wp(8),
+    marginTop: hp(2),
+  },
+  deadlineQuickChip: {
+    borderRadius: wp(11),
+    borderWidth: 1,
+    borderColor: "#c6decf",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: wp(10),
+    paddingVertical: hp(7),
+  },
+  deadlineQuickChipText: {
+    color: "#215c3a",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(12),
+  },
+  deadlineAdjustRow: {
+    flexDirection: "row",
+    gap: wp(8),
+  },
+  deadlineAdjustBtn: {
+    flex: 1,
+    minHeight: hp(36),
+    borderRadius: wp(10),
+    borderWidth: 1,
+    borderColor: "#d3e3d8",
+    backgroundColor: "#fdfefd",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deadlineAdjustBtnText: {
+    color: "#2b5d3f",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(12),
   },
   modalButtonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 2,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: wp(10),
+    marginTop: hp(4),
   },
   modalButton: {
-    minHeight: 42,
-    borderRadius: 11,
-    paddingHorizontal: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: hp(44),
+    borderRadius: wp(14),
+    paddingHorizontal: wp(18),
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalCancelButton: {
-    backgroundColor: '#e6e6e6',
+    backgroundColor: "#f0f0ee",
   },
   modalConfirmButton: {
-    backgroundColor: ONBOARDING_COLORS.greenDark,
+    backgroundColor: "#2daa57",
   },
   modalCancelText: {
-    color: '#3f4348',
-    fontSize: 14,
-    fontWeight: '700',
+    color: "#3f4349",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(14),
   },
   modalConfirmText: {
-    color: '#edf8ef',
-    fontSize: 14,
-    fontWeight: '700',
+    color: "#ffffff",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(14),
   },
   modalToggleRow: {
-    flexDirection: 'row',
-    gap: 8,
+    flexDirection: "row",
+    gap: wp(10),
   },
   modalToggle: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 10,
+    minHeight: hp(44),
+    borderRadius: wp(14),
     borderWidth: 1,
-    borderColor: '#d1d1d1',
-    backgroundColor: '#eeeeee',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "#e8e8e8",
+    backgroundColor: "#f0f0ee",
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalToggleActive: {
-    borderColor: '#5fad72',
-    backgroundColor: '#7bc67c',
+    borderColor: "#2daa57",
+    backgroundColor: "#e8f7ed",
   },
   modalToggleText: {
-    color: '#223026',
-    fontSize: 13,
-    fontWeight: '700',
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(13),
   },
   buttonDisabled: {
     opacity: 0.6,

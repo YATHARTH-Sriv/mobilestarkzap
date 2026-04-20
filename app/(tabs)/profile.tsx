@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { usePrivy } from '@privy-io/expo';
@@ -16,11 +25,13 @@ import {
 } from '@/lib/profile';
 import { shortenAddress } from '@/lib/http';
 
+/* ───────────────────── helpers (no changes) ──────────────── */
+
 type TransactionVisual = {
   iconName: 'arrow-up-outline' | 'arrow-down-outline';
   iconColor: string;
   iconBubble: string;
-  statusColor: string;
+  amountColor: string;
 };
 
 function buildInitials(username: string): string {
@@ -87,14 +98,14 @@ function prettyAction(action: string): string {
 
 function resolveTransactionVisual(transaction: UserTransactionActivity): TransactionVisual {
   const action = transaction.action.toLowerCase();
-  const incoming = action.includes('claim') || action.includes('resolved') || action.includes('check');
+  const incoming = action.includes('claim') || action.includes('resolved') || action.includes('check') || action.includes('receive');
 
   if (transaction.status === 'failed') {
     return {
       iconName: 'arrow-up-outline',
       iconColor: '#ef6f5d',
       iconBubble: '#fdf1ef',
-      statusColor: '#c23f31',
+      amountColor: '#c23f31',
     };
   }
 
@@ -103,7 +114,7 @@ function resolveTransactionVisual(transaction: UserTransactionActivity): Transac
       iconName: 'arrow-down-outline',
       iconColor: '#0ca74b',
       iconBubble: '#edf8f0',
-      statusColor: '#06a444',
+      amountColor: '#0ca74b',
     };
   }
 
@@ -111,7 +122,7 @@ function resolveTransactionVisual(transaction: UserTransactionActivity): Transac
     iconName: 'arrow-up-outline',
     iconColor: '#ff7f32',
     iconBubble: '#fdf4ea',
-    statusColor: '#242424',
+    amountColor: '#242424',
   };
 }
 
@@ -127,8 +138,11 @@ function transactionSubtitle(transaction: UserTransactionActivity): string {
   return signature;
 }
 
+/* ───────────────────── screen ────────────────────────────── */
+
 export default function ProfileScreen() {
   const { user, isReady, getAccessToken } = usePrivy();
+  const { width } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileMeResponse | null>(null);
   const [balances, setBalances] = useState<PredictionBalanceResponse | null>(null);
@@ -143,6 +157,13 @@ export default function ProfileScreen() {
   const initials = useMemo(() => buildInitials(username), [username]);
   const prettyBalance = useMemo(() => formatStrkTwoDecimals(balances?.userBalance ?? null), [balances?.userBalance]);
   const shortWallet = useMemo(() => shortenWalletForCard(walletAddress), [walletAddress]);
+
+  /* ── responsive ──────────────────────────────────────── */
+  const compact = width < 375;
+
+  const avatarSize = compact ? 48 : 56;
+  const balanceFontSize = compact ? 34 : 40;
+  const txnIconSize = compact ? 38 : 44;
 
   const loadData = useCallback(
     async (showLoader = true) => {
@@ -205,6 +226,8 @@ export default function ProfileScreen() {
     }, 1200);
   }
 
+  /* ── loading / auth gates ────────────────────────────── */
+
   if (!isReady || loading) {
     return (
       <View style={styles.loadingWrap}>
@@ -220,6 +243,8 @@ export default function ProfileScreen() {
       </View>
     );
   }
+
+  /* ── render ──────────────────────────────────────────── */
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -237,10 +262,17 @@ export default function ProfileScreen() {
             tintColor="#06ad43"
           />
         }>
+        {/* ── Header ────────────────────────────────── */}
         <View style={styles.headerRow}>
           <View style={styles.identityRow}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{initials}</Text>
+            <View
+              style={[
+                styles.avatarCircle,
+                { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 },
+              ]}>
+              <Text style={[styles.avatarInitials, { fontSize: compact ? 14 : 16 }]}>
+                {initials}
+              </Text>
             </View>
 
             <View style={styles.identityTextWrap}>
@@ -256,15 +288,18 @@ export default function ProfileScreen() {
             onPress={() => {
               void refreshProfileData();
             }}>
-            <Ionicons name="refresh" size={28} color="#5c5f64" />
+            <Ionicons name="refresh" size={20} color="#8e9196" />
           </Pressable>
         </View>
 
+        {/* ── Balance Card ──────────────────────────── */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Total Balance</Text>
 
           <View style={styles.balanceMainRow}>
-            <Text style={styles.balanceAmount}>{prettyBalance}</Text>
+            <Text style={[styles.balanceAmount, { fontSize: balanceFontSize }]}>
+              {prettyBalance}
+            </Text>
             <Text style={styles.balanceToken}>STRK</Text>
           </View>
 
@@ -275,14 +310,17 @@ export default function ProfileScreen() {
               onPress={() => {
                 void copyWalletAddress();
               }}>
-              <Ionicons name={copyStatus ? 'checkmark' : 'copy-outline'} size={20} color="#eaf8ec" />
+              <Ionicons
+                name={copyStatus ? 'checkmark' : 'copy-outline'}
+                size={16}
+                color="rgba(255,255,255,0.75)"
+              />
             </Pressable>
           </View>
         </View>
 
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Recent Transactions</Text>
-        </View>
+        {/* ── Recent Transactions ───────────────────── */}
+        <Text style={styles.sectionTitle}>Recent Transactions</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -298,8 +336,17 @@ export default function ProfileScreen() {
             return (
               <View key={transaction.id} style={styles.txnCard}>
                 <View style={styles.txnLeftGroup}>
-                  <View style={[styles.txnIconWrap, { backgroundColor: visual.iconBubble }]}>
-                    <Ionicons name={visual.iconName} size={22} color={visual.iconColor} />
+                  <View
+                    style={[
+                      styles.txnIconWrap,
+                      {
+                        backgroundColor: visual.iconBubble,
+                        width: txnIconSize,
+                        height: txnIconSize,
+                        borderRadius: txnIconSize / 2,
+                      },
+                    ]}>
+                    <Ionicons name={visual.iconName} size={compact ? 16 : 20} color={visual.iconColor} />
                   </View>
 
                   <View style={styles.txnTextGroup}>
@@ -313,7 +360,9 @@ export default function ProfileScreen() {
                 </View>
 
                 <View style={styles.txnMetaGroup}>
-                  <Text style={[styles.txnStatus, { color: visual.statusColor }]}>
+                  <Text
+                    style={[styles.txnStatus, { color: visual.amountColor }]}
+                    numberOfLines={1}>
                     {transaction.status === 'success' ? 'Confirmed' : 'Failed'}
                   </Text>
                   <Text style={styles.txnTime}>{formatTransactionClock(transaction.createdAt)}</Text>
@@ -333,36 +382,40 @@ export default function ProfileScreen() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
+  /* ── scaffold ──────────────────────────────────────────── */
   screen: {
     flex: 1,
-    backgroundColor: '#f5f5f3',
+    backgroundColor: '#faf9f7',
   },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f5f5f3',
+    backgroundColor: '#faf9f7',
   },
   fallbackText: {
     color: '#4a4d52',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 16,
-    fontWeight: '600',
   },
   scroll: {
     flex: 1,
   },
   content: {
-    paddingTop: 16,
-    paddingBottom: 122,
+    paddingTop: 12,
+    paddingBottom: 100,
     paddingHorizontal: 20,
-    gap: 18,
+    gap: 16,
   },
+
+  /* ── header ────────────────────────────────────────────── */
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   identityRow: {
     flexDirection: 'row',
@@ -372,76 +425,73 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   avatarCircle: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: '#ffa000',
+    backgroundColor: '#F5A623',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitials: {
     color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '500',
+    fontFamily: 'Inter_600SemiBold',
   },
   identityTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   welcomeLabel: {
-    color: '#6e7176',
-    fontSize: 20 / 2,
-    fontWeight: '500',
+    color: '#8e9196',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 14,
   },
   usernameText: {
     color: '#1c1f24',
-    fontSize: 42 / 2,
-    fontWeight: '700',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 22,
+    letterSpacing: -0.2,
   },
   refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f0f0ef',
+    backgroundColor: 'transparent',
   },
+
+  /* ── balance card ──────────────────────────────────────── */
   balanceCard: {
-    borderRadius: 38,
-    backgroundColor: '#05ad43',
-    minHeight: 256,
+    borderRadius: 28,
+    backgroundColor: '#2daa57',
     paddingHorizontal: 22,
-    paddingVertical: 26,
+    paddingVertical: 24,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 18,
+    gap: 6,
+    shadowColor: '#1b7a39',
+    shadowOpacity: 0.16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
     elevation: 4,
   },
   balanceLabel: {
-    color: '#dff5e5',
-    fontSize: 20 / 2,
-    fontWeight: '600',
-    marginBottom: 14,
+    color: 'rgba(255,255,255,0.70)',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+    marginBottom: 4,
   },
   balanceMainRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'baseline',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   balanceAmount: {
-    color: '#f4fff7',
-    fontSize: 76 / 2,
-    fontWeight: '700',
-    letterSpacing: -0.4,
+    color: '#ffffff',
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: -0.5,
   },
   balanceToken: {
-    color: '#dff5e5',
-    fontSize: 20 / 2,
-    fontWeight: '600',
-    marginBottom: 7,
+    color: 'rgba(255,255,255,0.60)',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 16,
   },
   walletRow: {
     flexDirection: 'row',
@@ -449,67 +499,70 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   walletText: {
-    color: '#dff5e5',
-    fontSize: 38 / 2,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.70)',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
   copyButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
-  sectionHeaderRow: {
-    marginTop: 14,
-    marginBottom: 6,
-  },
+
+  /* ── section ───────────────────────────────────────────── */
   sectionTitle: {
     color: '#1f2227',
-    fontSize: 22,
-    fontWeight: '700',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 20,
+    letterSpacing: -0.15,
+    marginTop: 8,
   },
   errorText: {
     color: '#c34635',
-    fontSize: 14,
-    marginBottom: 4,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
+    marginBottom: 2,
   },
+
+  /* ── empty txn ─────────────────────────────────────────── */
   emptyTxnCard: {
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    backgroundColor: '#fbfbfb',
-    minHeight: 96,
+    borderColor: '#ebebeb',
+    backgroundColor: '#ffffff',
+    minHeight: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     gap: 2,
   },
   emptyTxnTitle: {
     color: '#2d3035',
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
   },
   emptyTxnText: {
-    color: '#7c8086',
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#8c9097',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
   },
+
+  /* ── transaction card ──────────────────────────────────── */
   txnCard: {
-    borderRadius: 28,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
-    backgroundColor: '#fbfbfb',
-    minHeight: 124,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    borderColor: '#ebebeb',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10,
-    gap: 12,
+    gap: 10,
   },
   txnLeftGroup: {
     flex: 1,
@@ -518,41 +571,40 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   txnIconWrap: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
   txnTextGroup: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   txnAction: {
     color: '#22252a',
-    fontSize: 24 / 2,
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
   },
   txnSignature: {
-    color: '#7d8085',
-    fontSize: 36 / 2,
-    fontWeight: '500',
+    color: '#8c9097',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
   },
   txnMetaGroup: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    gap: 4,
-    minWidth: 88,
+    gap: 3,
+    minWidth: 80,
   },
   txnStatus: {
-    fontSize: 44 / 2,
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
   },
   txnTime: {
-    color: '#9a9da2',
-    fontSize: 42 / 2,
-    fontWeight: '500',
+    color: '#a5a8ad',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
   },
+
+  /* ── copy toast ────────────────────────────────────────── */
   copyToast: {
     marginTop: 4,
     alignSelf: 'flex-start',
@@ -563,7 +615,7 @@ const styles = StyleSheet.create({
   },
   copyToastText: {
     color: '#249a52',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
-    fontWeight: '600',
   },
 });

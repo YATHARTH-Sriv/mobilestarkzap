@@ -7,6 +7,7 @@ import { usePrivy } from '@privy-io/expo';
 import { HapticTab } from '@/components/haptic-tab';
 import { fetchMyProfile } from '@/lib/profile';
 import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';
+import { wp, hp, ms } from '@/lib/responsive';
 
 export default function TabLayout() {
   const { user, isReady, getAccessToken } = usePrivy();
@@ -85,9 +86,9 @@ export default function TabLayout() {
           backgroundColor: '#f4f4f4',
           borderTopColor: '#dfdfdf',
           borderTopWidth: 1,
-          height: 72,
-          paddingTop: 10,
-          paddingBottom: 10,
+          height: hp(72),
+          paddingTop: hp(10),
+          paddingBottom: hp(10),
         },
         tabBarShowLabel: false,
         headerShown: false,
@@ -97,7 +98,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="home-outline" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={ms(24)} name="home-outline" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -105,7 +106,7 @@ export default function TabLayout() {
         options={{
           title: 'Chats',
           tabBarIcon: ({ color }) => (
-            <Ionicons size={24} name="create-outline" color={color} />
+            <Ionicons size={ms(24)} name="chatbubbles-outline" color={color} />
           ),
         }}
       />
@@ -113,7 +114,13 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="person-outline" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={ms(24)} name="person-outline" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
