@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 18.7.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://backendstarkzap.onrender.com",
+        "EXPO_PUBLIC_WS_BASE_URL": "wss://backendstarkzap.onrender.com",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "cmnx18bpx01ho0cldaccnmlbu",
+        "EXPO_PUBLIC_PRIVY_CLIENT_ID": "client-WY6XqCAJMKeoo72o5ZDuWnyCqYncvvYhUnw5Jgztjuefy"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -20,7 +20,8 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.yatharthsriv.mobile"
     },
     "web": {
       "output": "static",
@@ -45,6 +46,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "be7027b5-678d-4bff-8480-e60946533e12"
+      }
     }
   }
 }
