@@ -35,6 +35,28 @@ type RoomSummary = {
   roomName: string;
   createdAt: string;
   memberCount: number;
+  visibility: "public" | "private";
+  joinPolicy: "open" | "approval" | "invite_only";
+  myMembershipStatus:
+    | "active"
+    | "pending"
+    | "invited"
+    | "removed"
+    | "banned"
+    | null;
+  myRole: "owner" | "admin" | "member" | null;
+  isMember: boolean;
+};
+
+type RoomMember = {
+  roomName: string;
+  privyUserId: string;
+  role: "owner" | "admin" | "member";
+  status: "active" | "pending" | "invited" | "removed" | "banned";
+  createdByPrivyUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  username: string | null;
 };
 
 type RoomMessage = {
@@ -83,6 +105,12 @@ type WsServerMessage =
   | { type: "error"; message: string }
   | { type: "room_joined"; room: string }
   | { type: "room_left"; room: string }
+  | {
+      type: "room_access_update";
+      room: string;
+      status: "pending" | "denied";
+      message: string;
+    }
   | { type: "message_history"; messages: RoomMessage[] }
   | RoomMessage;
 
@@ -156,6 +184,78 @@ function formatRoomTime(iso: string): string {
   }
 
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function formatJoinPolicyLabel(joinPolicy: RoomSummary["joinPolicy"]): string {
+  if (joinPolicy === "open") {
+    return "Open";
+  }
+
+  if (joinPolicy === "approval") {
+    return "Approval";
+  }
+
+  return "Invite only";
+}
+
+function formatVisibilityLabel(visibility: RoomSummary["visibility"]): string {
+  return visibility === "private" ? "Private" : "Community";
+}
+
+function formatRoomStatusLine(room: RoomSummary): string {
+  if (room.myMembershipStatus === "pending") {
+    return "Request pending admin approval";
+  }
+
+  if (room.myMembershipStatus === "invited") {
+    return "Invited - tap to join";
+  }
+
+  if (room.myMembershipStatus === "banned") {
+    return "Access blocked";
+  }
+
+  if (room.myMembershipStatus === "removed") {
+    return "Removed by admin";
+  }
+
+  if (room.isMember) {
+    return `${room.memberCount} members active`;
+  }
+
+  return `${formatVisibilityLabel(room.visibility)} • ${formatJoinPolicyLabel(room.joinPolicy)}`;
+}
+
+function formatRoleLabel(role: RoomMember["role"]): string {
+  if (role === "owner") {
+    return "Owner";
+  }
+
+  if (role === "admin") {
+    return "Admin";
+  }
+
+  return "Member";
+}
+
+function formatMembershipStatusLabel(status: RoomMember["status"]): string {
+  if (status === "pending") {
+    return "Pending";
+  }
+
+  if (status === "invited") {
+    return "Invited";
+  }
+
+  if (status === "removed") {
+    return "Removed";
+  }
+
+  if (status === "banned") {
+    return "Banned";
+  }
+
+  return "Active";
 }
 
 function formatMessageTime(iso: string): string {
@@ -257,6 +357,13 @@ function normalizeRoomName(raw: string): string {
     .slice(0, 40);
 }
 
+function normalizeUsernameDraft(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[^a-zA-Z0-9_]/g, "")
+    .slice(0, 20);
+}
+
 function parseDeadlineToUnix(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -322,6 +429,22 @@ export default function ChatsScreen() {
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [createRoomModalVisible, setCreateRoomModalVisible] = useState(false);
   const [createRoomNameDraft, setCreateRoomNameDraft] = useState("");
+  const [createRoomVisibility, setCreateRoomVisibility] = useState<
+    "public" | "private"
+  >("public");
+  const [createRoomJoinPolicy, setCreateRoomJoinPolicy] = useState<
+    "open" | "approval" | "invite_only"
+  >("open");
+  const [createRoomBusy, setCreateRoomBusy] = useState(false);
+  const [manageRoomModalVisible, setManageRoomModalVisible] = useState(false);
+  const [manageRoomBusy, setManageRoomBusy] = useState(false);
+  const [inviteUsernameDraft, setInviteUsernameDraft] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [requestActionBusyKey, setRequestActionBusyKey] = useState<
+    string | null
+  >(null);
+  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
+  const [roomRequests, setRoomRequests] = useState<RoomMember[]>([]);
 
   const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
   const [messageDraft, setMessageDraft] = useState("");
@@ -352,6 +475,23 @@ export default function ChatsScreen() {
 
   const myUsername = identity?.profile?.username ?? null;
   const myWalletAddress = identity?.wallet?.address ?? null;
+  const activeRoomSummary = useMemo(
+    () =>
+      activeRoom
+        ? (rooms.find((room) => room.roomName === activeRoom) ?? null)
+        : null,
+    [activeRoom, rooms],
+  );
+  const canManageActiveRoom = useMemo(() => {
+    if (!activeRoomSummary?.isMember) {
+      return false;
+    }
+
+    return (
+      activeRoomSummary.myRole === "owner" ||
+      activeRoomSummary.myRole === "admin"
+    );
+  }, [activeRoomSummary]);
 
   const drawerWidth = useMemo(() => Math.min(width * 0.8, 420), [width]);
 
@@ -435,9 +575,22 @@ export default function ChatsScreen() {
   }, [authenticated, getAccessToken]);
 
   const loadRooms = useCallback(async () => {
+    if (!authenticated) {
+      setRooms([]);
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/rooms?limit=100`);
+      const response = await fetch(`${API_BASE_URL}/api/chat/rooms?limit=100`, {
+        headers: await buildHeaders(),
+      });
+
       if (!response.ok) {
+        if (response.status === 401) {
+          setRooms([]);
+          return;
+        }
+
         throw new Error(await readErrorMessage(response));
       }
 
@@ -447,34 +600,104 @@ export default function ChatsScreen() {
       console.error(loadError);
       setError("Failed to load rooms");
     }
-  }, []);
+  }, [authenticated, buildHeaders]);
 
-  const loadRoomMessages = useCallback(async (roomName: string) => {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/messages?limit=80`,
-      );
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
+  const loadRoomMembersAndRequests = useCallback(
+    async (roomName: string) => {
+      if (!authenticated) {
+        setRoomMembers([]);
+        setRoomRequests([]);
+        return;
       }
 
-      const payload = (await response.json()) as { messages: RoomMessage[] };
-      setRoomMessages(payload.messages);
-    } catch (loadError) {
-      console.error(loadError);
-      setError("Failed to load room messages");
-    }
-  }, []);
+      try {
+        setManageRoomBusy(true);
+        const headers = await buildHeaders();
+        const [membersResponse, requestsResponse] = await Promise.all([
+          fetch(
+            `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/members`,
+            { headers },
+          ),
+          fetch(
+            `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/requests`,
+            { headers },
+          ),
+        ]);
+
+        if (!membersResponse.ok) {
+          throw new Error(await readErrorMessage(membersResponse));
+        }
+
+        const membersPayload = (await membersResponse.json()) as {
+          members: RoomMember[];
+        };
+        setRoomMembers(membersPayload.members);
+
+        if (requestsResponse.status === 403) {
+          setRoomRequests([]);
+          return;
+        }
+
+        if (!requestsResponse.ok) {
+          throw new Error(await readErrorMessage(requestsResponse));
+        }
+
+        const requestsPayload = (await requestsResponse.json()) as {
+          requests: RoomMember[];
+        };
+        setRoomRequests(requestsPayload.requests);
+      } catch (loadError) {
+        console.error(loadError);
+        setError("Failed to load room members");
+      } finally {
+        setManageRoomBusy(false);
+      }
+    },
+    [authenticated, buildHeaders],
+  );
+
+  const loadRoomMessages = useCallback(
+    async (roomName: string) => {
+      if (!authenticated) {
+        setRoomMessages([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/messages?limit=80`,
+          { headers: await buildHeaders() },
+        );
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const payload = (await response.json()) as { messages: RoomMessage[] };
+        setRoomMessages(payload.messages);
+      } catch (loadError) {
+        console.error(loadError);
+        setError("Failed to load room messages");
+      }
+    },
+    [authenticated, buildHeaders],
+  );
 
   const loadActiveRoomMarkets = useCallback(
     async (roomName: string) => {
+      if (!authenticated) {
+        setActiveMarkets([]);
+        return;
+      }
+
       try {
+        const authHeaders = await buildHeaders();
         const pageSize = 50;
         const roomMarkets: RoomContractMarket[] = [];
 
         for (let offset = 0; offset <= 450; offset += pageSize) {
           const marketsResponse = await fetch(
             `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/markets?limit=${pageSize}&offset=${offset}`,
+            { headers: authHeaders },
           );
 
           if (!marketsResponse.ok) {
@@ -558,11 +781,12 @@ export default function ChatsScreen() {
               const [detailResponse, canResolveResponse] = await Promise.all([
                 fetch(
                   `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/markets/${encodeURIComponent(market.marketId)}/details`,
+                  { headers: authHeaders },
                 ),
                 authenticated
                   ? fetch(
                       `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(roomName)}/markets/${encodeURIComponent(market.marketId)}/can-resolve`,
-                      { headers: await buildHeaders() },
+                      { headers: authHeaders },
                     )
                   : Promise.resolve(null),
               ]);
@@ -715,13 +939,28 @@ export default function ChatsScreen() {
               return;
             case "room_joined":
               setActiveRoom(payload.room);
+              setError(null);
               setStatus(`Joined #${payload.room}`);
+              void loadRooms();
+              return;
+            case "room_access_update":
+              setActiveRoom(null);
+              setRoomMessages([]);
+              setActiveMarkets([]);
+              setManageRoomModalVisible(false);
+              setRoomMembers([]);
+              setRoomRequests([]);
+              setStatus(payload.message);
+              setError(payload.message);
               void loadRooms();
               return;
             case "room_left":
               setActiveRoom(null);
               setRoomMessages([]);
               setActiveMarkets([]);
+              setManageRoomModalVisible(false);
+              setRoomMembers([]);
+              setRoomRequests([]);
               setStatus("Left room");
               void loadRooms();
               return;
@@ -772,6 +1011,9 @@ export default function ChatsScreen() {
       if (drawerVisible) {
         await loadActiveRoomMarkets(activeRoom);
       }
+      if (manageRoomModalVisible) {
+        await loadRoomMembersAndRequests(activeRoom);
+      }
       await loadRooms();
     } finally {
       setRefreshingMessages(false);
@@ -779,8 +1021,10 @@ export default function ChatsScreen() {
   }, [
     activeRoom,
     drawerVisible,
+    manageRoomModalVisible,
     loadRoomMessages,
     loadActiveRoomMarkets,
+    loadRoomMembersAndRequests,
     loadRooms,
     refreshRooms,
   ]);
@@ -827,6 +1071,24 @@ export default function ChatsScreen() {
     void loadActiveRoomMarkets(activeRoom);
   }, [activeRoom, drawerVisible, loadActiveRoomMarkets]);
 
+  useEffect(() => {
+    if (!activeRoom || !manageRoomModalVisible) {
+      return;
+    }
+
+    void loadRoomMembersAndRequests(activeRoom);
+  }, [activeRoom, manageRoomModalVisible, loadRoomMembersAndRequests]);
+
+  useEffect(() => {
+    if (activeRoom) {
+      return;
+    }
+
+    setManageRoomModalVisible(false);
+    setRoomMembers([]);
+    setRoomRequests([]);
+  }, [activeRoom]);
+
   useFocusEffect(
     useCallback(() => {
       void loadRooms();
@@ -836,6 +1098,9 @@ export default function ChatsScreen() {
         if (drawerVisible) {
           void loadActiveRoomMarkets(activeRoom);
         }
+        if (manageRoomModalVisible) {
+          void loadRoomMembersAndRequests(activeRoom);
+        }
       }
 
       const interval = setInterval(
@@ -844,6 +1109,9 @@ export default function ChatsScreen() {
             void loadRoomMessages(activeRoom);
             if (drawerVisible) {
               void loadActiveRoomMarkets(activeRoom);
+            }
+            if (manageRoomModalVisible) {
+              void loadRoomMembersAndRequests(activeRoom);
             }
           } else {
             void loadRooms();
@@ -858,6 +1126,8 @@ export default function ChatsScreen() {
     }, [
       activeRoom,
       drawerVisible,
+      manageRoomModalVisible,
+      loadRoomMembersAndRequests,
       loadRooms,
       loadRoomMessages,
       loadActiveRoomMarkets,
@@ -879,30 +1149,75 @@ export default function ChatsScreen() {
       return;
     }
 
+    const knownRoom = rooms.find((room) => room.roomName === normalized);
+    if (knownRoom?.myMembershipStatus === "pending") {
+      setError("Join request already pending approval");
+      return;
+    }
+
+    if (knownRoom?.myMembershipStatus === "banned") {
+      setError("You are blocked from this room");
+      return;
+    }
+
+    if (knownRoom?.myMembershipStatus === "removed") {
+      setError("You were removed from this room");
+      return;
+    }
+
     setError(null);
     setRoomMessages([]);
     setActiveMarkets([]);
     setRoomDraft(normalized);
+    setStatus(`Joining #${normalized}...`);
     sendWs({ type: MSG.JOIN_ROOM, room: normalized });
-    setActiveRoom(normalized);
-    void loadRooms();
   }
 
   function openCreateRoomPrompt() {
     setError(null);
     setCreateRoomNameDraft(roomDraft.trim());
+    setCreateRoomVisibility("public");
+    setCreateRoomJoinPolicy("open");
     setCreateRoomModalVisible(true);
   }
 
-  function confirmCreateRoom() {
+  async function confirmCreateRoom() {
     const normalized = normalizeRoomName(createRoomNameDraft);
     if (!normalized) {
       setError("Please add a room name before creating");
       return;
     }
 
-    setCreateRoomModalVisible(false);
-    joinRoom(normalized);
+    const joinPolicy =
+      createRoomVisibility === "public" ? "open" : createRoomJoinPolicy;
+
+    try {
+      setCreateRoomBusy(true);
+      setError(null);
+
+      const response = await fetch(`${API_BASE_URL}/api/chat/rooms`, {
+        method: "POST",
+        headers: await buildHeaders(),
+        body: JSON.stringify({
+          roomName: normalized,
+          visibility: createRoomVisibility,
+          joinPolicy,
+        }),
+      });
+
+      if (!response.ok && response.status !== 409) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      setCreateRoomModalVisible(false);
+      await loadRooms();
+      joinRoom(normalized);
+    } catch (createRoomError) {
+      console.error(createRoomError);
+      setError("Failed to create room");
+    } finally {
+      setCreateRoomBusy(false);
+    }
   }
 
   function joinRoomFromDraft() {
@@ -919,6 +1234,11 @@ export default function ChatsScreen() {
     sendWs({ type: MSG.LEAVE_ROOM });
     setActiveRoom(null);
     setDrawerVisible(false);
+    setManageRoomModalVisible(false);
+    setRoomMembers([]);
+    setRoomRequests([]);
+    setInviteUsernameDraft("");
+    setRequestActionBusyKey(null);
     setCreateModalVisible(false);
     setActionModal({ visible: false, action: "bet", market: null });
     void loadRooms();
@@ -955,6 +1275,116 @@ export default function ChatsScreen() {
     }).start(() => {
       setDrawerVisible(false);
     });
+  }
+
+  function openManageRoomModal() {
+    if (!activeRoom || !canManageActiveRoom) {
+      return;
+    }
+
+    setError(null);
+    setInviteUsernameDraft("");
+    setManageRoomModalVisible(true);
+    void loadRoomMembersAndRequests(activeRoom);
+  }
+
+  function closeManageRoomModal() {
+    if (inviteBusy || requestActionBusyKey !== null) {
+      return;
+    }
+
+    setManageRoomModalVisible(false);
+  }
+
+  async function submitRoomInvite() {
+    if (!activeRoom) {
+      return;
+    }
+
+    const username = normalizeUsernameDraft(inviteUsernameDraft);
+    if (!username) {
+      setError("Enter a username to invite");
+      return;
+    }
+
+    try {
+      setInviteBusy(true);
+      setError(null);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(activeRoom)}/invite`,
+        {
+          method: "POST",
+          headers: await buildHeaders(),
+          body: JSON.stringify({ username }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const payload = (await response.json()) as {
+        status:
+          | "invited"
+          | "already_member"
+          | "banned"
+          | "not_found"
+          | "invalid";
+        message: string;
+      };
+
+      setInviteUsernameDraft("");
+      setStatus(payload.message || "Invite processed");
+      await loadRoomMembersAndRequests(activeRoom);
+      await loadRooms();
+    } catch (inviteError) {
+      console.error(inviteError);
+      setError("Failed to invite user");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function submitRequestDecision(
+    targetPrivyUserId: string,
+    action: "approve" | "reject",
+  ) {
+    if (!activeRoom) {
+      return;
+    }
+
+    const decisionKey = `${action}:${targetPrivyUserId}`;
+
+    try {
+      setRequestActionBusyKey(decisionKey);
+      setError(null);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/chat/rooms/${encodeURIComponent(activeRoom)}/requests/${encodeURIComponent(targetPrivyUserId)}/${action}`,
+        {
+          method: "POST",
+          headers: await buildHeaders(),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      setStatus(action === "approve" ? "Request approved" : "Request rejected");
+      await loadRoomMembersAndRequests(activeRoom);
+      await loadRooms();
+    } catch (decisionError) {
+      console.error(decisionError);
+      setError(
+        action === "approve"
+          ? "Failed to approve request"
+          : "Failed to reject request",
+      );
+    } finally {
+      setRequestActionBusyKey(null);
+    }
   }
 
   function openActionModal(action: MarketActionType, market: ActiveMarketCard) {
@@ -1251,6 +1681,66 @@ export default function ChatsScreen() {
     return [...rooms].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [rooms]);
 
+  const privateRooms = useMemo(
+    () => sortedRooms.filter((room) => room.visibility === "private"),
+    [sortedRooms],
+  );
+
+  const communityRooms = useMemo(
+    () => sortedRooms.filter((room) => room.visibility === "public"),
+    [sortedRooms],
+  );
+
+  const renderRoomCard = (room: RoomSummary, index: number) => (
+    <Pressable
+      key={room.roomName}
+      style={styles.groupCard}
+      onPress={() => {
+        joinRoom(room.roomName);
+      }}
+    >
+      <View style={styles.groupIconCircle}>
+        <Ionicons
+          name={ROOM_ICONS[index % ROOM_ICONS.length] as "football-outline"}
+          size={ms(20)}
+          color="#fff"
+        />
+      </View>
+
+      <View style={styles.groupMainCopy}>
+        <View style={styles.groupTitleRow}>
+          <Text style={styles.groupName}>{room.roomName}</Text>
+          <View
+            style={[
+              styles.groupTypeBadge,
+              room.visibility === "private"
+                ? styles.groupTypeBadgePrivate
+                : styles.groupTypeBadgeCommunity,
+            ]}
+          >
+            <Text style={styles.groupTypeBadgeText}>
+              {room.visibility === "private" ? "Private" : "Public"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.groupSubtitle}>{formatRoomStatusLine(room)}</Text>
+
+        <Text style={styles.groupPolicyText}>
+          Join: {formatJoinPolicyLabel(room.joinPolicy)}
+          {room.myRole ? ` • Role: ${room.myRole}` : ""}
+        </Text>
+      </View>
+
+      <View style={styles.groupMetaColumn}>
+        <Text style={styles.groupTime}>{formatRoomTime(room.createdAt)}</Text>
+        {room.myMembershipStatus === "pending" ? (
+          <Text style={styles.groupPendingBadge}>Pending</Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       {!activeRoom ? (
@@ -1324,40 +1814,25 @@ export default function ChatsScreen() {
             <Text style={styles.createRoomLabel}>Create New Room</Text>
           </Pressable>
 
-          {/* ── Section Title ───────────────────── */}
-          <Text style={styles.sectionTitle}>Your Groups</Text>
+          {/* ── Private Groups ─────────────────── */}
+          <Text style={styles.sectionTitle}>Private Groups</Text>
+          {privateRooms.length === 0 ? (
+            <Text style={styles.emptyRoomCopy}>
+              No private groups yet. Create one for friend-only markets.
+            </Text>
+          ) : (
+            privateRooms.map((room, index) => renderRoomCard(room, index))
+          )}
 
-          {/* ── Room Cards ──────────────────────── */}
-          {sortedRooms.map((room, index) => (
-            <Pressable
-              key={room.roomName}
-              style={styles.groupCard}
-              onPress={() => {
-                joinRoom(room.roomName);
-              }}
-            >
-              <View style={styles.groupIconCircle}>
-                <Ionicons
-                  name={
-                    ROOM_ICONS[index % ROOM_ICONS.length] as "football-outline"
-                  }
-                  size={ms(20)}
-                  color="#fff"
-                />
-              </View>
-
-              <View style={styles.groupMainCopy}>
-                <Text style={styles.groupName}>{room.roomName}</Text>
-                <Text style={styles.groupSubtitle}>
-                  {room.memberCount} members active
-                </Text>
-              </View>
-
-              <Text style={styles.groupTime}>
-                {formatRoomTime(room.createdAt)}
-              </Text>
-            </Pressable>
-          ))}
+          {/* ── Community Rooms ────────────────── */}
+          <Text style={styles.sectionTitle}>Community Rooms</Text>
+          {communityRooms.length === 0 ? (
+            <Text style={styles.emptyRoomCopy}>No community rooms yet.</Text>
+          ) : (
+            communityRooms.map((room, index) =>
+              renderRoomCard(room, index + privateRooms.length),
+            )
+          )}
         </ScrollView>
       ) : (
         <View style={styles.chatWrap}>
@@ -1372,6 +1847,18 @@ export default function ChatsScreen() {
             </Text>
 
             <View style={styles.chatHeaderActions}>
+              {canManageActiveRoom ? (
+                <Pressable
+                  style={styles.headerIconBtn}
+                  onPress={openManageRoomModal}
+                >
+                  <Ionicons
+                    name="people-outline"
+                    size={ms(18)}
+                    color="#3f4349"
+                  />
+                </Pressable>
+              ) : null}
               <Pressable
                 style={styles.headerIconBtn}
                 onPress={() => {
@@ -1389,6 +1876,12 @@ export default function ChatsScreen() {
               </Pressable>
             </View>
           </View>
+
+          <Text style={styles.metaStatus}>
+            {activeRoomSummary
+              ? `${formatVisibilityLabel(activeRoomSummary.visibility)} room • ${formatJoinPolicyLabel(activeRoomSummary.joinPolicy)} join`
+              : status}
+          </Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -1454,6 +1947,11 @@ export default function ChatsScreen() {
                 </View>
               );
             })}
+            {roomMessages.length === 0 ? (
+              <Text style={styles.metaStatus}>
+                No messages yet in this room.
+              </Text>
+            ) : null}
           </ScrollView>
 
           {/* ── Composer ────────────────────────── */}
@@ -1655,22 +2153,104 @@ export default function ChatsScreen() {
               style={styles.modalInput}
               autoCapitalize="words"
               autoCorrect={false}
-              onSubmitEditing={confirmCreateRoom}
+              onSubmitEditing={() => {
+                void confirmCreateRoom();
+              }}
             />
+
+            <Text style={styles.modalFieldLabel}>Room type</Text>
+            <View style={styles.modalToggleRow}>
+              <Pressable
+                style={[
+                  styles.modalToggle,
+                  createRoomVisibility === "public"
+                    ? styles.modalToggleActive
+                    : undefined,
+                ]}
+                onPress={() => {
+                  setCreateRoomVisibility("public");
+                  setCreateRoomJoinPolicy("open");
+                }}
+              >
+                <Text style={styles.modalToggleText}>Community</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.modalToggle,
+                  createRoomVisibility === "private"
+                    ? styles.modalToggleActive
+                    : undefined,
+                ]}
+                onPress={() => {
+                  setCreateRoomVisibility("private");
+                  if (createRoomJoinPolicy === "open") {
+                    setCreateRoomJoinPolicy("invite_only");
+                  }
+                }}
+              >
+                <Text style={styles.modalToggleText}>Private</Text>
+              </Pressable>
+            </View>
+
+            {createRoomVisibility === "private" ? (
+              <>
+                <Text style={styles.modalFieldLabel}>Private join mode</Text>
+                <View style={styles.modalToggleRow}>
+                  <Pressable
+                    style={[
+                      styles.modalToggle,
+                      createRoomJoinPolicy === "invite_only"
+                        ? styles.modalToggleActive
+                        : undefined,
+                    ]}
+                    onPress={() => setCreateRoomJoinPolicy("invite_only")}
+                  >
+                    <Text style={styles.modalToggleText}>Invite Only</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.modalToggle,
+                      createRoomJoinPolicy === "approval"
+                        ? styles.modalToggleActive
+                        : undefined,
+                    ]}
+                    onPress={() => setCreateRoomJoinPolicy("approval")}
+                  >
+                    <Text style={styles.modalToggleText}>Approval</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.modalInfoText}>
+                Community rooms are open for everyone to join and chat.
+              </Text>
+            )}
 
             <View style={styles.modalButtonRow}>
               <Pressable
                 style={[styles.modalButton, styles.modalCancelButton]}
+                disabled={createRoomBusy}
                 onPress={() => setCreateRoomModalVisible(false)}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
 
               <Pressable
-                style={[styles.modalButton, styles.modalConfirmButton]}
-                onPress={confirmCreateRoom}
+                style={[
+                  styles.modalButton,
+                  styles.modalConfirmButton,
+                  createRoomBusy ? styles.buttonDisabled : undefined,
+                ]}
+                disabled={createRoomBusy}
+                onPress={() => {
+                  void confirmCreateRoom();
+                }}
               >
-                <Text style={styles.modalConfirmText}>Create Room</Text>
+                <Text style={styles.modalConfirmText}>
+                  {createRoomBusy ? "Creating..." : "Create Room"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -1838,6 +2418,166 @@ export default function ChatsScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={manageRoomModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeManageRoomModal}
+      >
+        <View style={styles.centerModalOverlay}>
+          <View style={[styles.centerModalCard, styles.manageRoomModalCard]}>
+            <View style={styles.manageRoomHeaderRow}>
+              <Text style={styles.centerModalTitle}>Manage Room Access</Text>
+              <Pressable
+                style={styles.manageCloseBtn}
+                disabled={inviteBusy || requestActionBusyKey !== null}
+                onPress={closeManageRoomModal}
+              >
+                <Ionicons name="close" size={ms(18)} color="#5d6168" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalInfoText}>
+              Invite members and approve pending requests for this private
+              group.
+            </Text>
+
+            <Text style={styles.modalFieldLabel}>Invite by username</Text>
+            <View style={styles.manageInviteRow}>
+              <TextInput
+                value={inviteUsernameDraft}
+                onChangeText={setInviteUsernameDraft}
+                placeholder="username"
+                placeholderTextColor="#9ea1a7"
+                style={[styles.modalInput, styles.manageInviteInput]}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!inviteBusy}
+                onSubmitEditing={() => {
+                  void submitRoomInvite();
+                }}
+              />
+              <Pressable
+                style={[
+                  styles.manageInviteBtn,
+                  inviteBusy ? styles.buttonDisabled : undefined,
+                ]}
+                disabled={inviteBusy}
+                onPress={() => {
+                  void submitRoomInvite();
+                }}
+              >
+                <Text style={styles.manageInviteBtnText}>
+                  {inviteBusy ? "Sending..." : "Invite"}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalFieldLabel}>Pending Requests</Text>
+            <ScrollView
+              style={styles.manageListScroll}
+              contentContainerStyle={styles.manageListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {manageRoomBusy ? (
+                <Text style={styles.manageEmptyText}>Loading...</Text>
+              ) : roomRequests.length === 0 ? (
+                <Text style={styles.manageEmptyText}>No pending requests.</Text>
+              ) : (
+                roomRequests.map((request) => {
+                  const requestKey = request.privyUserId;
+                  const approveKey = `approve:${requestKey}`;
+                  const rejectKey = `reject:${requestKey}`;
+                  const busy =
+                    requestActionBusyKey === approveKey ||
+                    requestActionBusyKey === rejectKey;
+
+                  return (
+                    <View key={requestKey} style={styles.manageRequestCard}>
+                      <View style={styles.manageRequestMeta}>
+                        <Text style={styles.manageRequestName}>
+                          {request.username ?? request.privyUserId.slice(0, 10)}
+                        </Text>
+                        <Text style={styles.manageRequestSubtext}>
+                          {formatMembershipStatusLabel(request.status)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.manageRequestActions}>
+                        <Pressable
+                          style={[
+                            styles.manageRequestBtn,
+                            styles.manageApproveBtn,
+                            busy ? styles.buttonDisabled : undefined,
+                          ]}
+                          disabled={busy}
+                          onPress={() => {
+                            void submitRequestDecision(
+                              request.privyUserId,
+                              "approve",
+                            );
+                          }}
+                        >
+                          <Text style={styles.manageRequestBtnText}>
+                            Approve
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={[
+                            styles.manageRequestBtn,
+                            styles.manageRejectBtn,
+                            busy ? styles.buttonDisabled : undefined,
+                          ]}
+                          disabled={busy}
+                          onPress={() => {
+                            void submitRequestDecision(
+                              request.privyUserId,
+                              "reject",
+                            );
+                          }}
+                        >
+                          <Text style={styles.manageRequestBtnText}>
+                            Reject
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <Text style={styles.modalFieldLabel}>Active Members</Text>
+            <ScrollView
+              style={styles.manageListScroll}
+              contentContainerStyle={styles.manageListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {manageRoomBusy ? (
+                <Text style={styles.manageEmptyText}>Loading...</Text>
+              ) : roomMembers.length === 0 ? (
+                <Text style={styles.manageEmptyText}>No active members.</Text>
+              ) : (
+                roomMembers.map((member) => (
+                  <View
+                    key={`${member.roomName}:${member.privyUserId}`}
+                    style={styles.manageMemberCard}
+                  >
+                    <Text style={styles.manageMemberName}>
+                      {member.username ?? member.privyUserId.slice(0, 10)}
+                    </Text>
+                    <Text style={styles.manageMemberRole}>
+                      {formatRoleLabel(member.role)}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
       <Modal
@@ -2051,20 +2791,68 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: hp(2),
   },
+  groupTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(8),
+  },
   groupName: {
     color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
     fontSize: ms(16),
+  },
+  groupTypeBadge: {
+    borderRadius: wp(8),
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(3),
+  },
+  groupTypeBadgePrivate: {
+    backgroundColor: "#e8efff",
+  },
+  groupTypeBadgeCommunity: {
+    backgroundColor: "#e8f7ed",
+  },
+  groupTypeBadgeText: {
+    color: "#2c394f",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(10),
+    textTransform: "uppercase",
   },
   groupSubtitle: {
     color: "#8c9097",
     fontFamily: "Inter_500Medium",
     fontSize: ms(13),
   },
+  groupPolicyText: {
+    color: "#a2a5ab",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(11),
+  },
+  groupMetaColumn: {
+    alignItems: "flex-end",
+    gap: hp(6),
+  },
   groupTime: {
     color: "#a5a8ad",
     fontFamily: "Inter_500Medium",
     fontSize: ms(12),
+  },
+  groupPendingBadge: {
+    color: "#8a5a00",
+    backgroundColor: "#fff1cc",
+    borderRadius: wp(6),
+    paddingHorizontal: wp(6),
+    paddingVertical: hp(3),
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(10),
+    textTransform: "uppercase",
+  },
+  emptyRoomCopy: {
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(13),
+    marginTop: hp(-8),
+    marginBottom: hp(4),
   },
 
   /* ── create room ───────────────────────────────────────── */
@@ -2465,6 +3253,121 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 8,
+  },
+  manageRoomModalCard: {
+    maxHeight: "88%",
+  },
+  manageRoomHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  manageCloseBtn: {
+    width: wp(30),
+    height: wp(30),
+    borderRadius: wp(15),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f0ee",
+  },
+  manageInviteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp(8),
+  },
+  manageInviteInput: {
+    flex: 1,
+  },
+  manageInviteBtn: {
+    minHeight: hp(44),
+    borderRadius: wp(12),
+    paddingHorizontal: wp(14),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2daa57",
+  },
+  manageInviteBtnText: {
+    color: "#ffffff",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(13),
+  },
+  manageListScroll: {
+    maxHeight: hp(160),
+  },
+  manageListContent: {
+    gap: hp(8),
+    paddingBottom: hp(4),
+  },
+  manageEmptyText: {
+    color: "#8c9097",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(12),
+  },
+  manageRequestCard: {
+    borderRadius: wp(12),
+    borderWidth: 1,
+    borderColor: "#e9e9e9",
+    backgroundColor: "#fdfdfc",
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(10),
+    gap: hp(8),
+  },
+  manageRequestMeta: {
+    gap: hp(2),
+  },
+  manageRequestName: {
+    color: "#1f2937",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(13),
+  },
+  manageRequestSubtext: {
+    color: "#7f848c",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(11),
+  },
+  manageRequestActions: {
+    flexDirection: "row",
+    gap: wp(8),
+  },
+  manageRequestBtn: {
+    flex: 1,
+    minHeight: hp(36),
+    borderRadius: wp(10),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  manageApproveBtn: {
+    backgroundColor: "#2daa57",
+  },
+  manageRejectBtn: {
+    backgroundColor: "#d64c3b",
+  },
+  manageRequestBtnText: {
+    color: "#ffffff",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(12),
+  },
+  manageMemberCard: {
+    borderRadius: wp(12),
+    borderWidth: 1,
+    borderColor: "#ececec",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: wp(12),
+    paddingVertical: hp(9),
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  manageMemberName: {
+    color: "#1f2937",
+    fontFamily: "Inter_500Medium",
+    fontSize: ms(13),
+  },
+  manageMemberRole: {
+    color: "#5b6470",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: ms(11),
+    textTransform: "uppercase",
   },
   createMarketHeaderRow: {
     flexDirection: "row",
