@@ -1,7 +1,7 @@
 # StarkBet — Mobile App
 
 A **React Native (Expo)** mobile application that brings **social payments**, **real-time group chat**, and **on-chain prediction markets** to Starknet — all powered by [**StarkZap**](https://www.starkzap.com/) for seamless wallet management and transaction execution.
-
+Backend Code Repo:https://github.com/YATHARTH-Sriv/backendstarkzap
 > Users sign in with social accounts via Privy, get a server-managed Starknet wallet automatically, and can send STRK tokens, chat in rooms, and bet on prediction markets — without ever touching a private key.
 
 ---
