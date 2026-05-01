@@ -4,27 +4,27 @@ import { usePrivy } from "@privy-io/expo";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import {
-    SafeAreaView,
-    useSafeAreaInsets,
+  SafeAreaView,
+  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
 import { shortenAddress } from "@/lib/http";
 import {
-    fetchPaymentHistory,
-    sendDirectPayment,
-    type DirectPaymentHistoryItem,
+  fetchPaymentHistory,
+  sendDirectPayment,
+  type DirectPaymentHistoryItem,
 } from "@/lib/payments";
 
 function formatPaymentDateTime(iso: string): string {
@@ -110,7 +110,7 @@ export default function PaymentHistoryScreen() {
         const paymentHistory = await fetchPaymentHistory(
           getAccessToken,
           selectedRecipient,
-          60,
+          60
         );
         setHistory(paymentHistory);
       } catch (loadError) {
@@ -125,7 +125,7 @@ export default function PaymentHistoryScreen() {
         }
       }
     },
-    [getAccessToken, selectedRecipient, user],
+    [getAccessToken, selectedRecipient, user]
   );
 
   useEffect(() => {
@@ -172,7 +172,7 @@ export default function PaymentHistoryScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.loadingWrap} edges={["top", "bottom"]}>
-        <ActivityIndicator size="large" color="#05ad43" />
+        <ActivityIndicator size="large" color="#10b981" />
       </SafeAreaView>
     );
   }
@@ -182,16 +182,23 @@ export default function PaymentHistoryScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <View style={styles.headerRow}>
+        <View style={styles.header}>
           <Pressable style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={ms(22)} color="#50545b" />
+            <Ionicons name="arrow-back" size={24} color="#1c1f24" />
           </Pressable>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <View style={styles.headerSpacer} />
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitle}>{title}</Text>
+          </View>
+          <View style={{ width: 40 }} />
         </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
 
         <ScrollView
           style={styles.scroll}
@@ -204,12 +211,15 @@ export default function PaymentHistoryScreen() {
               onRefresh={() => {
                 void refreshHistory();
               }}
-              tintColor="#05ad43"
+              tintColor="#10b981"
             />
           }
         >
           {history.length === 0 ? (
-            <View style={styles.emptyCard}>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
+              </View>
               <Text style={styles.emptyTitle}>No payments yet</Text>
               <Text style={styles.emptyBody}>
                 Send your first STRK transfer to start this history.
@@ -218,96 +228,49 @@ export default function PaymentHistoryScreen() {
           ) : (
             history.map((item) => {
               const mine = item.senderPrivyUserId === user?.id;
-              const counterpartyIsExternal = mine
-                ? item.recipientPrivyUserId === null
-                : false;
-              const counterparty = mine
-                ? formatCounterparty(item.recipientUsername)
-                : formatCounterparty(item.senderUsername);
-              const cardTitle = mine ? "You sent" : "You received";
               const amountLabel = `${mine ? "-" : "+"}${item.amountUnit} ${item.tokenSymbol}`;
 
               return (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.transactionCard,
-                    mine
-                      ? styles.transactionCardOutgoing
-                      : styles.transactionCardIncoming,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.transactionCardTitle,
-                      mine
-                        ? styles.transactionCardTitleOutgoing
-                        : styles.transactionCardTitleIncoming,
-                    ]}
-                  >
-                    {cardTitle}
-                  </Text>
-
-                  <Text
-                    style={[
-                      styles.transactionCardAmount,
-                      mine
-                        ? styles.transactionCardAmountOutgoing
-                        : styles.transactionCardAmountIncoming,
-                    ]}
-                  >
-                    {amountLabel}
-                  </Text>
-
-                  <Text
-                    style={[
-                      styles.transactionCardCounterparty,
-                      mine
-                        ? styles.transactionCardCounterpartyOutgoing
-                        : styles.transactionCardCounterpartyIncoming,
-                    ]}
-                  >
-                    {mine ? `To ${counterparty}` : `From ${counterparty}`}
-                  </Text>
-
-                  <View style={styles.transactionCardFooter}>
-                    <Ionicons
-                      name={mine ? "arrow-up-circle" : "arrow-down-circle"}
-                      size={ms(16)}
-                      color={mine ? "#ffb27b" : "#0fa866"}
-                    />
-                    <Text
+                <View key={item.id} style={styles.txnCard}>
+                  <View style={styles.txnHeader}>
+                    <View
                       style={[
-                        styles.transactionCardDate,
-                        mine
-                          ? styles.transactionCardDateOutgoing
-                          : styles.transactionCardDateIncoming,
+                        styles.txnIconWrap,
+                        { backgroundColor: mine ? "#fee2e2" : "#d1fae5" },
                       ]}
                     >
-                      {formatPaymentDateTime(item.createdAt)}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.transactionDirectionBadge,
-                        mine
-                          ? styles.transactionDirectionBadgeOutgoing
-                          : styles.transactionDirectionBadgeIncoming,
-                      ]}
-                    >
-                      {mine ? "Sent" : "Received"}
-                    </Text>
-
-                    {counterpartyIsExternal ? (
-                      <Text
-                        style={[
-                          styles.transactionCardExternalBadge,
-                          styles.transactionCardExternalBadgeOutgoing,
-                        ]}
-                      >
-                        External
+                      <Ionicons
+                        name={mine ? "arrow-up" : "arrow-down"}
+                        size={16}
+                        color={mine ? "#ef4444" : "#10b981"}
+                      />
+                    </View>
+                    <View style={styles.txnMeta}>
+                      <Text style={styles.txnTitle}>
+                        {mine ? "Sent STRK" : "Received STRK"}
                       </Text>
-                    ) : null}
+                      <Text style={styles.txnDate}>
+                        {formatPaymentDateTime(item.createdAt)}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.txnAmount,
+                        { color: mine ? "#1c1f24" : "#10b981" },
+                      ]}
+                    >
+                      {amountLabel}
+                    </Text>
+                  </View>
+                  <View style={styles.txnFooter}>
+                    <Text style={styles.txnStatus}>
+                      {item.status === "success" ? "Completed" : "Failed"}
+                    </Text>
+                    {item.txHash && (
+                      <Text style={styles.txnHash}>
+                        {shortenAddress(item.txHash)}
+                      </Text>
+                    )}
                   </View>
                 </View>
               );
@@ -317,31 +280,36 @@ export default function PaymentHistoryScreen() {
 
         <View
           style={[
-            styles.composerWrap,
-            { paddingBottom: Math.max(insets.bottom, hp(10)) },
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom, 16) },
           ]}
         >
-          <TextInput
-            value={amountInput}
-            onChangeText={setAmountInput}
-            placeholder="Amount in STRK"
-            placeholderTextColor="#94989e"
-            keyboardType="decimal-pad"
-            style={styles.amountInput}
-          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              value={amountInput}
+              onChangeText={setAmountInput}
+              placeholder="0.00"
+              placeholderTextColor="#9ca3af"
+              keyboardType="decimal-pad"
+              style={styles.amountInput}
+            />
+            <Text style={styles.currencyTag}>STRK</Text>
+          </View>
           <Pressable
             style={[
               styles.sendButton,
-              sending ? styles.sendButtonDisabled : undefined,
+              sending || !amountInput.trim() ? styles.sendButtonDisabled : undefined,
             ]}
-            disabled={sending}
+            disabled={sending || !amountInput.trim()}
             onPress={() => {
               void submitPayment();
             }}
           >
-            <Text style={styles.sendButtonText}>
-              {sending ? "Sending..." : "Send"}
-            </Text>
+            {sending ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.sendButtonText}>Send</Text>
+            )}
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -352,8 +320,7 @@ export default function PaymentHistoryScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#faf9f7",
-    paddingHorizontal: wp(20),
+    backgroundColor: "#ffffff",
   },
   keyboardContainer: {
     flex: 1,
@@ -362,201 +329,189 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#faf9f7",
   },
-  headerRow: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: hp(4),
-    marginBottom: hp(12),
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   backButton: {
-    width: wp(36),
-    height: wp(36),
-    borderRadius: wp(18),
-    alignItems: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f3f4f6",
     justifyContent: "center",
-    backgroundColor: "#f0f0ee",
+    alignItems: "center",
+  },
+  headerTitleWrap: {
+    flex: 1,
+    alignItems: "center",
   },
   headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
     color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
-    fontSize: ms(18),
-    letterSpacing: -0.2,
   },
-  headerSpacer: {
-    width: wp(36),
-    height: wp(36),
+  errorBanner: {
+    backgroundColor: "#fee2e2",
+    padding: 12,
+    marginHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 12,
   },
   errorText: {
-    color: "#c34635",
+    color: "#ef4444",
+    fontSize: 14,
     fontFamily: "Inter_500Medium",
-    fontSize: ms(12),
-    marginBottom: hp(6),
+    textAlign: "center",
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: hp(16),
-    gap: hp(16),
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
   },
-  emptyCard: {
-    minHeight: hp(100),
-    borderRadius: wp(18),
-    borderWidth: 1,
-    borderColor: "#ebebeb",
-    backgroundColor: "#ffffff",
+  emptyState: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: wp(16),
-    gap: hp(4),
+    paddingVertical: 80,
+  },
+  emptyIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#f3f4f6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
   },
   emptyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
     color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
-    fontSize: ms(16),
+    marginBottom: 8,
   },
   emptyBody: {
-    color: "#8c9097",
-    fontFamily: "Inter_500Medium",
-    fontSize: ms(13),
+    fontSize: 16,
+    color: "#6b7280",
+    fontFamily: "Inter_400Regular",
     textAlign: "center",
+    paddingHorizontal: 40,
   },
-  transactionCard: {
-    borderRadius: wp(20),
-    padding: wp(20),
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  transactionCardOutgoing: {
-    backgroundColor: "#2a2d35",
-  },
-  transactionCardIncoming: {
-    backgroundColor: "#edf8f0",
+  txnCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "#d6ebdd",
+    borderColor: "#f3f4f6",
+    marginBottom: 12,
   },
-  transactionCardTitle: {
-    fontSize: ms(15),
-    fontFamily: "Inter_500Medium",
-    marginBottom: hp(4),
-  },
-  transactionCardTitleOutgoing: {
-    color: "rgba(255,255,255,0.70)",
-  },
-  transactionCardTitleIncoming: {
-    color: "#3c6b4a",
-  },
-  transactionCardAmount: {
-    fontSize: ms(36),
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: -0.5,
-    marginBottom: hp(8),
-  },
-  transactionCardAmountOutgoing: {
-    color: "#ffffff",
-  },
-  transactionCardAmountIncoming: {
-    color: "#0b9a43",
-  },
-  transactionCardCounterparty: {
-    fontFamily: "Inter_500Medium",
-    fontSize: ms(14),
-    marginBottom: hp(12),
-  },
-  transactionCardCounterpartyOutgoing: {
-    color: "rgba(255,255,255,0.84)",
-  },
-  transactionCardCounterpartyIncoming: {
-    color: "#486a53",
-  },
-  transactionCardFooter: {
+  txnHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: wp(6),
   },
-  transactionCardDate: {
-    fontSize: ms(13),
-    fontFamily: "Inter_500Medium",
-  },
-  transactionCardDateOutgoing: {
-    color: "rgba(255,255,255,0.55)",
-  },
-  transactionCardDateIncoming: {
-    color: "#60786a",
-  },
-  transactionDirectionBadge: {
-    fontSize: ms(11),
-    fontFamily: "Inter_600SemiBold",
-    paddingHorizontal: wp(8),
-    paddingVertical: hp(3),
-    borderRadius: wp(8),
-    marginLeft: "auto",
-  },
-  transactionDirectionBadgeOutgoing: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.70)",
-  },
-  transactionDirectionBadgeIncoming: {
-    backgroundColor: "#cde9d7",
-    color: "#2c6a43",
-  },
-  transactionCardExternalBadge: {
-    fontSize: ms(11),
-    fontFamily: "Inter_600SemiBold",
-    paddingHorizontal: wp(8),
-    paddingVertical: hp(3),
-    borderRadius: wp(8),
-  },
-  transactionCardExternalBadgeOutgoing: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    color: "rgba(255,255,255,0.70)",
-  },
-  composerWrap: {
-    flexDirection: "row",
+  txnIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
     alignItems: "center",
-    gap: wp(10),
-    paddingTop: hp(14),
+    marginRight: 12,
+  },
+  txnMeta: {
+    flex: 1,
+  },
+  txnTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+  },
+  txnDate: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  txnAmount: {
+    fontSize: 18,
+    fontWeight: "700",
+    fontFamily: "Inter_600SemiBold",
+  },
+  txnFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#ebebeb",
+    borderTopColor: "#f3f4f6",
+  },
+  txnStatus: {
+    fontSize: 12,
+    color: "#10b981",
+    fontFamily: "Inter_500Medium",
+  },
+  txnHash: {
+    fontSize: 12,
+    color: "#9ca3af",
+    fontFamily: "Inter_400Regular",
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  inputContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
   },
   amountInput: {
     flex: 1,
-    height: hp(50),
-    borderRadius: wp(16),
-    borderWidth: 1,
-    borderColor: "#e8e8e8",
-    backgroundColor: "#ffffff",
-    paddingHorizontal: wp(16),
+    fontSize: 20,
+    fontWeight: "600",
     color: "#1c1f24",
-    fontFamily: "Inter_500Medium",
-    fontSize: ms(15),
+    fontFamily: "Inter_600SemiBold",
+  },
+  currencyTag: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6b7280",
+    fontFamily: "Inter_600SemiBold",
+    marginLeft: 8,
   },
   sendButton: {
-    minWidth: wp(80),
-    height: hp(50),
-    borderRadius: wp(16),
-    alignItems: "center",
+    height: 56,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: "#10b981",
     justifyContent: "center",
-    paddingHorizontal: wp(16),
-    backgroundColor: "#2daa57",
-    shadowColor: "#1b7a39",
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    alignItems: "center",
+    minWidth: 100,
   },
   sendButtonDisabled: {
-    opacity: 0.65,
+    backgroundColor: "#d1d5db",
   },
   sendButtonText: {
     color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
     fontFamily: "Inter_600SemiBold",
-    fontSize: ms(15),
   },
 });

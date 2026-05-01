@@ -25,10 +25,15 @@ export function OnboardingCta({
       onPress={() => {
         void onPress();
       }}
-      style={[styles.button, variant === 'black' ? styles.blackButton : styles.greenButton, disabled ? styles.disabled : undefined]}>
+      style={({ pressed }) => [
+        styles.button,
+        variant === 'black' ? styles.blueButton : styles.greenButton,
+        disabled ? styles.disabled : undefined,
+        pressed && styles.pressed,
+      ]}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.iconWrap}>
-        {icon ?? <Ionicons name="arrow-forward" size={24} color="#f5f7f9" />}
+        {icon ?? <Ionicons name="arrow-forward" size={24} color="#ffffff" />}
       </View>
     </Pressable>
   );
@@ -36,34 +41,34 @@ export function OnboardingCta({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 66,
-    borderRadius: 33,
-    paddingHorizontal: 26,
+    minHeight: 60,
+    borderRadius: 30,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000000',
-    shadowOpacity: 0.09,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
+    justifyContent: 'center',
+    gap: 12,
   },
   greenButton: {
-    backgroundColor: ONBOARDING_COLORS.greenDark,
+    backgroundColor: '#10b981',
   },
-  blackButton: {
-    backgroundColor: '#131922',
+  blueButton: {
+    backgroundColor: '#1c1f24', // Deep black/navy for premium look on white
   },
   label: {
-    color: '#f5f7f9',
-    fontSize: 19,
-    fontWeight: '700',
+    color: '#ffffff',
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
   },
   iconWrap: {
-    width: 36,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   disabled: {
-    opacity: 0.55,
+    opacity: 0.4,
+  },
+  pressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
 });

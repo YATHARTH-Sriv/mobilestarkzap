@@ -4,181 +4,95 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-    useWindowDimensions,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { shortenAddress } from "@/lib/http";
 import {
-    fetchRecentPaymentContacts,
-    searchPaymentUsers,
-    type PaymentUser,
-    type RecentPaymentContact,
-} from "@/lib/payments";
-import { fetchMyProfile } from "@/lib/profile";
+  fetchMyPredictionBalances,
+  fetchMyProfile,
+  formatWeiToStrk,
+  formatWeiToUsdc,
+  type PredictionBalanceResponse,
+} from "@/lib/profile";
+import { fetchRecentPaymentContacts, type RecentPaymentContact } from "@/lib/payments";
+import { Toast } from "@/components/SharedComponents";
 
-const FALLBACK_USERNAME = "there";
+const FALLBACK_USERNAME = "User";
 
-/** Rotating palette so each avatar gets a distinct orange-spectrum colour */
 const AVATAR_COLORS = [
-  "#F5A623", // warm amber
-  "#E8753A", // burnt orange
-  "#F0C040", // golden
-  "#E85D3A", // deep orange-red
-  "#F5A623",
-  "#D96832",
-  "#F0C040",
-  "#E85D3A",
+  "#6366f1", // Indigo
+  "#ec4899", // Pink
+  "#f59e0b", // Amber
+  "#10b981", // Emerald
+  "#3b82f6", // Blue
+  "#8b5cf6", // Violet
+  "#ef4444", // Red
+  "#06b6d4", // Cyan
 ] as const;
-
-function normalizeUsername(username: string | null | undefined): string {
-  const trimmed = (username ?? "").trim();
-  if (!trimmed) {
-    return FALLBACK_USERNAME;
-  }
-
-  return trimmed;
-}
-
-function looksLikeWalletAddress(value: string): boolean {
-  return /^0x[a-fA-F0-9]{10,}$/.test(value);
-}
 
 export default function HomeScreen() {
   const { getAccessToken } = usePrivy();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-
   const [username, setUsername] = useState(FALLBACK_USERNAME);
-  const [refreshingProfile, setRefreshingProfile] = useState(false);
-  const [recentContacts, setRecentContacts] = useState<RecentPaymentContact[]>(
-    [],
-  );
-  const [searchInput, setSearchInput] = useState("");
-  const [searchResults, setSearchResults] = useState<PaymentUser[]>([]);
-  const [searchingUsers, setSearchingUsers] = useState(false);
-  const [openingThreadFor, setOpeningThreadFor] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [strkBalance, setStrkBalance] = useState<PredictionBalanceResponse | null>(null);
+  const [recentContacts, setRecentContacts] = useState<RecentPaymentContact[]>([]);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
 
-  const resolveUsername = useCallback(async (): Promise<string> => {
-    const payload = await fetchMyProfile(getAccessToken);
-    return normalizeUsername(payload.profile?.username);
-  }, [getAccessToken]);
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+  };
 
-  const loadRecentContacts = useCallback(async () => {
+  const loadData = useCallback(async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true);
     try {
-      const contacts = await fetchRecentPaymentContacts(getAccessToken, 8);
-      setRecentContacts(contacts);
-    } catch {
-      setRecentContacts([]);
+      const [profileData, balanceData, contactsData] = await Promise.all([
+        fetchMyProfile(getAccessToken),
+        fetchMyPredictionBalances(getAccessToken),
+        fetchRecentPaymentContacts(getAccessToken, 12),
+      ]);
+
+      setUsername(profileData.profile?.username || FALLBACK_USERNAME);
+      setStrkBalance(balanceData);
+      setRecentContacts(contactsData);
+    } catch (err) {
+      console.error("Failed to load home data", err);
+      showToast("Failed to sync data");
+    } finally {
+      if (showRefresh) setRefreshing(false);
     }
   }, [getAccessToken]);
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-
-      async function loadData() {
-        try {
-          const [nextUsername] = await Promise.all([
-            resolveUsername(),
-            loadRecentContacts(),
-          ]);
-
-          if (!cancelled) {
-            setUsername(nextUsername);
-          }
-        } catch {
-          if (!cancelled) {
-            setUsername(FALLBACK_USERNAME);
-          }
-        }
-      }
-
-      void loadData();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [resolveUsername, loadRecentContacts]),
+      loadData();
+    }, [loadData])
   );
 
-  const refreshHome = useCallback(async () => {
-    setRefreshingProfile(true);
-    try {
-      const [nextUsername] = await Promise.all([
-        resolveUsername(),
-        loadRecentContacts(),
-      ]);
-      setUsername(nextUsername);
-    } catch {
-      setUsername(FALLBACK_USERNAME);
-    } finally {
-      setRefreshingProfile(false);
-    }
-  }, [resolveUsername, loadRecentContacts]);
+  const onRefresh = () => loadData(true);
 
-  const searchUsers = useCallback(
-    async (query: string) => {
-      const normalized = query.trim();
-      if (normalized.length < 2) {
-        setSearchResults([]);
-        return;
-      }
+  // Real balance calculation
+  const strkAmountStr = strkBalance ? formatWeiToStrk(strkBalance.userBalance).split(" ")[0] : "0";
+  const strkAmount = parseFloat(strkAmountStr) || 0;
 
-      setSearchingUsers(true);
-      try {
-        const users = await searchPaymentUsers(getAccessToken, normalized, 8);
-        setSearchResults(users);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchingUsers(false);
-      }
-    },
-    [getAccessToken],
-  );
+  const strkPrice = parseFloat(strkBalance?.strkPriceUsdc || "0") || 0;
+  const strkFiat = strkAmount * strkPrice;
 
-  const openPaymentThread = useCallback(
-    (recipient: string) => {
-      if (!recipient) {
-        return;
-      }
+  const usdcAmountStr = strkBalance ? formatWeiToUsdc(strkBalance.userUsdcBalance).split(" ")[0] : "0";
+  const usdcAmount = parseFloat(usdcAmountStr) || 0;
+  const usdcPrice = parseFloat(strkBalance?.usdcPriceUsdc || "0") || 0;
+  const usdcFiat = usdcAmount * usdcPrice;
 
-      setOpeningThreadFor(recipient);
-      router.push({
-        pathname: "../payments/[username]",
-        params: { username: recipient },
-      });
-
-      setTimeout(() => {
-        setOpeningThreadFor(null);
-      }, 500);
-    },
-    [router],
-  );
-
-  /* ── responsive helpers ─────────────────────────────────── */
-  const compact = width < 375;
-  const medium = width >= 375 && width < 414;
-
-  const avatarSize = compact ? 56 : medium ? 62 : 68;
-  const avatarFontSize = compact ? 13 : 15;
-  const contactNameSize = compact ? 12 : 14;
-
-  const normalizedSearchInput = searchInput.trim();
-  const showSendToWalletRow =
-    looksLikeWalletAddress(normalizedSearchInput) &&
-    !searchingUsers &&
-    searchResults.length === 0;
+  const totalFiat = strkFiat + usdcFiat;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -187,495 +101,318 @@ export default function HomeScreen() {
         contentContainerStyle={styles.contentWrap}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshingProfile}
-            onRefresh={() => {
-              void refreshHome();
-            }}
-            tintColor="#08a844"
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10b981" />
         }
       >
-        {/* ── Welcome ─────────────────────────────────── */}
-        <View style={styles.welcomeRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.homeWelcomeLabel}>Welcome</Text>
-            <Text style={styles.homeUsername} numberOfLines={1}>
-              {username}
-            </Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.welcomeText}>Welcome back</Text>
+            <Text style={styles.usernameText}>{username}</Text>
           </View>
-
-          <Pressable
-            style={styles.refreshButton}
-            onPress={() => {
-              void refreshHome();
-            }}
-          >
-            <Ionicons name="refresh" size={18} color="#8e9196" />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable style={styles.iconButton} onPress={onRefresh}>
+              <Ionicons name="refresh-outline" size={20} color="#1c1f24" />
+            </Pressable>
+            <Pressable style={styles.walletSelector}>
+              <Text style={styles.walletText}>Wallet 1</Text>
+              <Ionicons name="chevron-down" size={14} color="#6b7280" />
+            </Pressable>
+          </View>
         </View>
 
-        {/* ── Send Money Card ────────────────────────── */}
-        <View style={styles.sendCard}>
-          <View style={styles.sendHeaderRow}>
-            <View style={styles.sendIconWrap}>
-              <Ionicons name="paper-plane-outline" size={22} color="#fff" />
-            </View>
-
-            <View style={styles.sendHeaderTextWrap}>
-              <Text style={styles.sendTitle}>Send Money</Text>
-              <Text style={styles.sendSubtitle}>Quick transfer to wallet</Text>
-            </View>
-          </View>
-
-          <View style={styles.searchInputWrap}>
-            <TextInput
-              value={searchInput}
-              onChangeText={(value) => {
-                setSearchInput(value);
-                void searchUsers(value);
-              }}
-              placeholder="Enter wallet address or search"
-              placeholderTextColor="rgba(255,255,255,0.65)"
-              style={styles.searchInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {searchingUsers ? (
-            <ActivityIndicator
-              size="small"
-              color="#eefaf0"
-              style={styles.searchLoader}
-            />
-          ) : null}
-
-          {searchResults.length > 0 ? (
-            <View style={styles.searchResultsWrap}>
-              {searchResults.map((result) => (
-                <Pressable
-                  key={result.privyUserId}
-                  style={styles.searchResultRow}
-                  onPress={() => {
-                    setSearchInput(result.username);
-                    setSearchResults([]);
-                    openPaymentThread(result.walletAddress);
-                  }}
-                >
-                  <Text style={styles.searchResultName}>
-                    @{result.username}
-                  </Text>
-                  <Text style={styles.searchResultWallet}>
-                    {shortenAddress(result.walletAddress)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          {showSendToWalletRow ? (
-            <View style={styles.searchResultsWrap}>
-              <Pressable
-                style={styles.searchResultRow}
-                onPress={() => {
-                  openPaymentThread(normalizedSearchInput);
-                }}
-              >
-                <View style={styles.walletSendRowTextWrap}>
-                  <Text style={styles.searchResultName}>Send to wallet</Text>
-                  <Text style={styles.searchResultWallet}>
-                    {shortenAddress(normalizedSearchInput)}
-                  </Text>
-                </View>
-                <Ionicons name="arrow-forward" size={16} color="#dff3e2" />
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-
-        {/* ── Recent Contacts ────────────────────────── */}
-        <Text style={styles.sectionTitle}>Recent</Text>
-
-        {recentContacts.length === 0 ? (
-          <View style={styles.emptyRecentCard}>
-            <Text style={styles.emptyRecentTitle}>No recent people yet</Text>
-            <Text style={styles.emptyRecentBody}>
-              Your direct payment contacts will appear here.
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={recentContacts}
-            keyExtractor={(item) => `${item.username}-${item.walletAddress}`}
-            horizontal
-            scrollEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.recentListRow}
-            renderItem={({ item, index }) => {
-              const initials = looksLikeWalletAddress(item.username)
-                ? item.walletAddress.slice(2, 4).toUpperCase()
-                : item.username.slice(0, 2).toUpperCase();
-
-              const avatarBg = AVATAR_COLORS[index % AVATAR_COLORS.length];
-
-              return (
-                <Pressable
-                  style={[styles.recentContactItem, { width: avatarSize + 14 }]}
-                  onPress={() => {
-                    openPaymentThread(item.walletAddress);
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.recentContactAvatar,
-                      {
-                        width: avatarSize,
-                        height: avatarSize,
-                        borderRadius: avatarSize / 2,
-                        backgroundColor: avatarBg,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.recentContactInitials,
-                        { fontSize: avatarFontSize },
-                      ]}
-                    >
-                      {initials}
-                    </Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.recentContactName,
-                      { fontSize: contactNameSize },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.username}
-                  </Text>
-                  {item.isExternal ? (
-                    <Text style={styles.externalContactTag}>External</Text>
-                  ) : null}
-                </Pressable>
-              );
-            }}
-          />
-        )}
-
-        {/* ── Quick Actions ──────────────────────────── */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-
-        <View style={styles.quickActionsRow}>
-          <Pressable
-            style={styles.quickActionCard}
-            onPress={() => {
-              if (recentContacts[0]?.walletAddress) {
-                openPaymentThread(recentContacts[0].walletAddress);
-                return;
-              }
-
-              if (searchInput.trim().length > 0) {
-                openPaymentThread(searchInput.trim());
-              }
-            }}
-          >
-            <View style={styles.quickActionIconWrapPrimary}>
-              <Ionicons name="paper-plane-outline" size={22} color="#f27a1a" />
-            </View>
-            <Text style={styles.quickActionTitle}>Send</Text>
-            <Text style={styles.quickActionBody}>Transfer crypto</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.quickActionCard}
-            onPress={() => {
-              if (recentContacts[0]?.walletAddress) {
-                openPaymentThread(recentContacts[0].walletAddress);
-              }
-            }}
-          >
-            <View style={styles.quickActionIconWrapSecondary}>
-              <Ionicons name="add" size={24} color="#d4920a" />
-            </View>
-            <Text style={styles.quickActionTitle}>Receive</Text>
-            <Text style={styles.quickActionBody}>Get crypto</Text>
-          </Pressable>
-        </View>
-
-        {openingThreadFor ? (
-          <Text style={styles.navigationHint}>
-            Opening{" "}
-            {looksLikeWalletAddress(openingThreadFor)
-              ? shortenAddress(openingThreadFor)
-              : `@${openingThreadFor}`}
-            ...
+        {/* Balance Area */}
+        <View style={styles.balanceContainer}>
+          <Text style={styles.totalBalanceText}>
+            ${totalFiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
-        ) : null}
+          {/* <Text style={styles.changeText}>+5.2% today</Text> */}
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionsRow}>
+          <Pressable style={styles.actionPill} onPress={() => router.push("/send" as any)}>
+            <Text style={styles.actionPillText}>Send</Text>
+          </Pressable>
+          <Pressable style={styles.actionPill} onPress={() => router.push("/swap" as any)}>
+            <Text style={styles.actionPillText}>Swap</Text>
+          </Pressable>
+          <Pressable style={[styles.actionPill, styles.morePill]}>
+            <Ionicons name="ellipsis-horizontal" size={18} color="#1c1f24" />
+          </Pressable>
+        </View>
+
+        {/* Assets Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Assets</Text>
+        </View>
+
+        <View style={styles.assetCard}>
+          <View style={styles.assetIconWrap}>
+            <Image source={require("@/assets/images/strk.png")} style={styles.assetIcon} />
+          </View>
+          <View style={styles.assetInfo}>
+            <Text style={styles.assetName}>STRK</Text>
+            <Text style={styles.assetNetwork}>Starknet</Text>
+          </View>
+          <View style={styles.assetBalanceWrap}>
+            <Text style={styles.assetBalanceCrypto}>{strkAmount.toLocaleString()} STRK</Text>
+            <Text style={styles.assetBalanceFiat}>
+              ${strkFiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {/* <Text style={styles.assetChangeText}> +5.2%</Text> */}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.assetCard}>
+          <View style={styles.assetIconWrap}>
+            <Image source={require("@/assets/images/usd.png")} style={styles.assetIcon} />
+          </View>
+          <View style={styles.assetInfo}>
+            <Text style={styles.assetName}>USDC</Text>
+            <Text style={styles.assetNetwork}>USD Coin</Text>
+          </View>
+          <View style={styles.assetBalanceWrap}>
+            <Text style={styles.assetBalanceCrypto}>{usdcAmount.toLocaleString()} USDC</Text>
+            <Text style={styles.assetBalanceFiat}>
+              {usdcPrice > 0
+                ? `$${usdcFiat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : "--"}
+              <Text style={styles.assetNeutralText}> 0.0%</Text>
+            </Text>
+          </View>
+        </View>
+
+        {/* Recent People Section */}
+        {recentContacts.length > 0 && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: 12 }]}>
+              <Text style={styles.sectionTitle}>Recent</Text>
+            </View>
+            <View style={styles.recentGrid}>
+              {recentContacts.map((contact, index) => {
+                const initials = contact.username.slice(0, 1).toUpperCase() || "?";
+                const bgColor = AVATAR_COLORS[index % AVATAR_COLORS.length];
+
+                return (
+                  <Pressable
+                    key={`${contact.walletAddress}-${index}`}
+                    style={styles.recentItem}
+                    onPress={() => router.push({
+                      pathname: "../payments/[username]" as any,
+                      params: { username: contact.walletAddress }
+                    })}
+                  >
+                    <View style={[styles.avatarCircle, { backgroundColor: bgColor }]}>
+                      <Text style={styles.avatarText}>{initials}</Text>
+                    </View>
+                    <Text style={styles.recentName} numberOfLines={1}>{contact.username}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
+      <Toast message={toastMsg} visible={toastVisible} onHide={() => setToastVisible(false)} />
     </SafeAreaView>
   );
 }
 
-/* ─────────────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  /* ── scaffold ──────────────────────────────────────────── */
   screen: {
     flex: 1,
-    backgroundColor: "#faf9f7",
+    backgroundColor: "#ffffff",
   },
   scroll: {
     flex: 1,
   },
   contentWrap: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 100,
-    gap: 18,
+    paddingTop: 12,
+    paddingBottom: 40,
   },
-
-  /* ── welcome row ───────────────────────────────────────── */
-  welcomeRow: {
+  header: {
     flexDirection: "row",
-    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginTop: 4,
+    alignItems: "center",
+    marginBottom: 40,
   },
-  homeWelcomeLabel: {
-    color: "#1a1d22",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 30,
-    letterSpacing: -0.3,
-  },
-  homeUsername: {
-    color: "#6b6e74",
+  welcomeText: {
+    fontSize: 14,
+    color: "#6b7280",
     fontFamily: "Inter_500Medium",
-    fontSize: 18,
-    lineHeight: 26,
-    marginTop: 2,
   },
-  refreshButton: {
+  usernameText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: "center",
+    backgroundColor: "#f3f4f6",
     justifyContent: "center",
-    backgroundColor: "transparent",
-    marginTop: 6,
+    alignItems: "center",
   },
-
-  /* ── send money card ───────────────────────────────────── */
-  sendCard: {
-    backgroundColor: "#2daa57",
-    borderRadius: 24,
-    padding: 20,
-    gap: 14,
-    shadowColor: "#1b7a39",
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
-  },
-  sendHeaderRow: {
+  walletSelector: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
   },
-  sendIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.35)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendHeaderTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  sendTitle: {
-    color: "#ffffff",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 20,
-    letterSpacing: -0.2,
-  },
-  sendSubtitle: {
-    color: "rgba(255,255,255,0.78)",
-    fontFamily: "Inter_500Medium",
+  walletText: {
     fontSize: 14,
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
   },
-  searchInputWrap: {
-    height: 52,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: "rgba(0,0,0,0.25)",
-    backgroundColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 16,
-    justifyContent: "center",
-  },
-  searchInput: {
-    color: "#ffffff",
-    fontFamily: "Inter_500Medium",
-    fontSize: 15,
-  },
-  searchLoader: {
-    marginTop: 2,
-  },
-  searchResultsWrap: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.12)",
-    backgroundColor: "rgba(255,255,255,0.15)",
-    overflow: "hidden",
-  },
-  searchResultRow: {
-    minHeight: 46,
-    paddingHorizontal: 14,
-    flexDirection: "row",
+  balanceContainer: {
     alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.14)",
+    marginBottom: 32,
   },
-  searchResultName: {
-    color: "#f2fbf4",
+  totalBalanceText: {
+    fontSize: 48,
+    fontWeight: "700",
+    color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
+    letterSpacing: -1,
   },
-  searchResultWallet: {
-    color: "rgba(255,255,255,0.65)",
+  changeText: {
+    fontSize: 16,
+    color: "#10b981",
     fontFamily: "Inter_500Medium",
-    fontSize: 12,
-  },
-  walletSendRowTextWrap: {
-    flex: 1,
-    gap: 1,
-  },
-
-  /* ── section ───────────────────────────────────────────── */
-  sectionTitle: {
-    color: "#1e2126",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 20,
-    letterSpacing: -0.15,
     marginTop: 4,
   },
-
-  /* ── empty recent ──────────────────────────────────────── */
-  emptyRecentCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#e8e8e8",
-    backgroundColor: "#ffffff",
-    minHeight: 80,
-    alignItems: "center",
+  actionsRow: {
+    flexDirection: "row",
     justifyContent: "center",
-    gap: 3,
+    gap: 12,
+    marginBottom: 48,
   },
-  emptyRecentTitle: {
-    color: "#24272c",
+  actionPill: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: "#f3f4f6",
+    minWidth: 80,
+    alignItems: "center",
+  },
+  morePill: {
+    paddingHorizontal: 16,
+    minWidth: 0,
+  },
+  actionPillText: {
+    fontSize: 16,
+    color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
   },
-  emptyRecentBody: {
-    color: "#8c9097",
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-  },
-
-  /* ── recent contacts grid ──────────────────────────────── */
-  recentListRow: {
-    paddingRight: 8,
+  sectionHeader: {
     marginBottom: 16,
   },
-  recentContactItem: {
-    alignItems: "center",
-    gap: 6,
-    marginRight: 18,
-  },
-  recentContactAvatar: {
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  recentContactInitials: {
-    color: "#ffffff",
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
   },
-  recentContactName: {
-    color: "#3f4349",
+  assetCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
+    marginBottom: 12,
+  },
+  assetIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#f3f4f6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    overflow: "hidden",
+  },
+  assetIcon: {
+    width: 48,
+    height: 48,
+  },
+  assetInfo: {
+    flex: 1,
+  },
+  assetName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+  },
+  assetNetwork: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontFamily: "Inter_400Regular",
+  },
+  assetBalanceWrap: {
+    alignItems: "flex-end",
+  },
+  assetBalanceCrypto: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1c1f24",
+    fontFamily: "Inter_600SemiBold",
+  },
+  assetBalanceFiat: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontFamily: "Inter_500Medium",
+  },
+  assetChangeText: {
+    color: "#10b981",
+  },
+  assetNeutralText: {
+    color: "#6b7280",
+  },
+  recentGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -8,
+  },
+  recentItem: {
+    width: "25%",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    marginBottom: 16,
+  },
+  avatarCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  avatarText: {
+    fontSize: 20,
+    color: "#ffffff",
+    fontWeight: "700",
+    fontFamily: "Inter_600SemiBold",
+  },
+  recentName: {
+    fontSize: 12,
+    color: "#1c1f24",
     fontFamily: "Inter_500Medium",
     textAlign: "center",
-  },
-  externalContactTag: {
-    marginTop: 1,
-    color: "#7a5d1e",
-    backgroundColor: "#f8eabf",
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    overflow: "hidden",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 9,
-    lineHeight: 14,
-  },
-
-  /* ── quick actions ─────────────────────────────────────── */
-  quickActionsRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  quickActionCard: {
-    flex: 1,
-    minHeight: 130,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#ebebeb",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 16,
-  },
-  quickActionIconWrapPrimary: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#fff0e0",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  quickActionIconWrapSecondary: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#fdf5d8",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  quickActionTitle: {
-    color: "#23262b",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 16,
-  },
-  quickActionBody: {
-    color: "#8c9097",
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-  },
-
-  /* ── misc ──────────────────────────────────────────────── */
-  navigationHint: {
-    color: "#8c9097",
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-    marginTop: 2,
+    width: "100%",
   },
 });

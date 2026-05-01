@@ -73,6 +73,7 @@ export type FundWalletOnboardingResponse = {
 
 export type PredictionBalanceResponse = {
   tokenContractAddress: string;
+  usdcTokenContractAddress: string;
   walletAddress: string;
   treasuryAddress: string;
   symbol: string;
@@ -81,11 +82,18 @@ export type PredictionBalanceResponse = {
     low: string;
     high: string;
   };
+  userUsdcBalance: string;
+  userUsdcBalanceRaw: {
+    low: string;
+    high: string;
+  };
   treasuryBalance: string;
   treasuryBalanceRaw: {
     low: string;
     high: string;
   };
+  strkPriceUsdc: string;
+  usdcPriceUsdc?: string;
 };
 
 export type UserTransactionActivity = {
@@ -296,6 +304,23 @@ export function formatWeiToStrk(wei: string): string {
     .slice(0, 4)
     .replace(/0+$/, "");
   return `${whole.toString()}.${fractionText || "0"} STRK`;
+}
+
+export function formatWeiToUsdc(wei: string): string {
+  const parsed = BigInt(wei || "0");
+  const whole = parsed / 10n ** 6n;
+  const fraction = parsed % 10n ** 6n;
+
+  if (fraction === 0n) {
+    return `${whole.toString()} USDC`;
+  }
+
+  const fractionText = fraction
+    .toString()
+    .padStart(6, "0")
+    .slice(0, 2)
+    .replace(/0+$/, "");
+  return `${whole.toString()}.${fractionText || "0"} USDC`;
 }
 
 export function formatTimeAgo(iso: string): string {

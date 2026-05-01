@@ -8,83 +8,123 @@ import { OnboardingCta } from '@/components/onboarding-cta';
 import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';
 
 export default function DoneScreen() {
-  const { width, height } = useWindowDimensions();
   const scale = useRef(new Animated.Value(0.7)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-
-  const compactWidth = width <= 375;
-  const compactHeight = height <= 760;
-  const topPadding = compactHeight ? 132 : 168;
-  const circleSize = compactWidth ? 204 : 236;
-  const iconSize = compactWidth ? 76 : 86;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(scale, {
         toValue: 1,
-        duration: 420,
-        easing: Easing.out(Easing.back(1.3)),
+        duration: 600,
+        easing: Easing.out(Easing.back(1.5)),
         useNativeDriver: true,
       }),
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 260,
-        easing: Easing.out(Easing.ease),
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
 
     const timer = setTimeout(() => {
       router.replace('/(tabs)');
-    }, 1300);
+    }, 2000);
 
     return () => clearTimeout(timer);
-  }, [scale, opacity]);
+  }, []);
 
   function enterApp() {
     router.replace('/(tabs)');
   }
 
   return (
-    <OnboardingFrame footer={<OnboardingCta label="Enter App" onPress={enterApp} variant="green" />}>
-      <View style={[styles.centeredContent, { paddingTop: topPadding }]}> 
-        <Text style={[styles.title, compactWidth ? styles.titleCompact : undefined]}>Setup Done!</Text>
+    <OnboardingFrame>
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Animated.View
+            style={[
+              styles.successCircle,
+              { transform: [{ scale }], opacity },
+            ]}>
+            <View style={styles.successInner}>
+              <Ionicons name="checkmark" size={60} color="#ffffff" />
+            </View>
+            <View style={styles.successRing} />
+          </Animated.View>
 
-        <Animated.View
-          style={[
-            styles.checkCircle,
-            { width: circleSize, height: circleSize, borderRadius: circleSize / 2, transform: [{ scale }], opacity },
-          ]}>
-          <Ionicons name="checkmark" size={iconSize} color="#f7faf8" />
-        </Animated.View>
+          <Animated.View style={[styles.textBlock, { opacity }]}>
+            <Text style={styles.title}>All Set!</Text>
+            <Text style={styles.subtitle}>
+              Your Zen account is ready. Welcome to the future of finance.
+            </Text>
+          </Animated.View>
+        </View>
+
+        <View style={styles.footer}>
+          <OnboardingCta label="Enter App" onPress={enterApp} variant="black" />
+        </View>
       </View>
     </OnboardingFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  centeredContent: {
+  container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 62,
+    justifyContent: "space-between",
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+  content: {
+    alignItems: "center",
+    gap: 40,
+  },
+  successCircle: {
+    width: 160,
+    height: 160,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  successInner: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#00c2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#00c2ff",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  successRing: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 2,
+    borderColor: "#00c2ff",
+    opacity: 0.2,
+  },
+  textBlock: {
+    alignItems: "center",
+    gap: 12,
   },
   title: {
-    color: '#4a4d51',
-    fontSize: 66 / 2,
-    fontWeight: '800',
+    color: "#ffffff",
+    fontSize: 36,
+    fontFamily: "Inter_700Bold",
   },
-  titleCompact: {
-    fontSize: 30,
+  subtitle: {
+    color: "#9ca3af",
+    fontSize: 16,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+    paddingHorizontal: 40,
+    lineHeight: 24,
   },
-  checkCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: ONBOARDING_COLORS.green,
-    shadowColor: '#67b96c',
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
+  footer: {
+    width: "100%",
   },
 });

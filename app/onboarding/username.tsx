@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy } from "@privy-io/expo";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+    Animated,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -17,22 +19,34 @@ import {
 
 import { OnboardingCta } from "@/components/onboarding-cta";
 import { OnboardingFrame } from "@/components/onboarding-frame";
-import { ONBOARDING_COLORS } from "@/lib/onboarding-theme";
 import { fetchMyProfile, setMyUsername } from "@/lib/profile";
 
 export default function UsernameScreen() {
   const { user, getAccessToken } = usePrivy();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
-  const compactWidth = width <= 375;
-  const compactHeight = height <= 760;
-  const topPadding = compactHeight ? 126 : 168;
-  const titleSize = compactWidth ? 44 : 52;
-  const fieldMinHeight = compactWidth ? 78 : 86;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,9 +59,7 @@ export default function UsernameScreen() {
 
       try {
         const payload = await fetchMyProfile(getAccessToken);
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         if (payload.profile?.onboardingCompleted) {
           router.replace("/(tabs)");
@@ -60,25 +72,17 @@ export default function UsernameScreen() {
         }
       } catch (profileError) {
         if (!cancelled) {
-          const message =
-            profileError instanceof Error
-              ? profileError.message
-              : "Failed to load profile";
-          setError(message);
+          setError("Failed to load profile");
         }
       }
     }
 
     void bootstrap();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user, getAccessToken]);
 
   async function submitUsername() {
     const nextUsername = username.trim();
-
     if (!nextUsername) {
       setError("Pick a username to continue");
       return;
@@ -92,11 +96,7 @@ export default function UsernameScreen() {
       setStatus("Username saved");
       router.replace("./wallet");
     } catch (saveError) {
-      const message =
-        saveError instanceof Error
-          ? saveError.message
-          : "Failed to save username";
-      setError(message);
+      setError(saveError instanceof Error ? saveError.message : "Failed to save username");
       setStatus("");
     } finally {
       setSubmitting(false);
@@ -117,59 +117,52 @@ export default function UsernameScreen() {
             bounces={false}
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.centeredContent, { paddingTop: topPadding }]}>
-              <View
-                style={[
-                  styles.stepBadge,
-                  compactWidth ? styles.stepBadgeCompact : undefined,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.stepText,
-                    compactWidth ? styles.stepTextCompact : undefined,
-                  ]}
-                >
-                  Step 1/2
-                </Text>
+            <Animated.View style={[styles.centeredContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+              <View style={styles.stepBadge}>
+                <Text style={styles.stepText}>Step 1 of 2</Text>
               </View>
-              <Text style={[styles.title, { fontSize: titleSize }]}>
-                Set Username
-              </Text>
+              
+              <View style={styles.headerText}>
+                <Text style={styles.title}>What is your{'\n'}name?</Text>
+                <Text style={styles.subtitle}>Pick a unique username for your Zen account.</Text>
+              </View>
 
-              <View style={[styles.inputWrap, { minHeight: fieldMinHeight }]}>
-                <Ionicons
-                  name="person-outline"
-                  size={compactWidth ? 24 : 26}
-                  color="#8a8d93"
-                />
-                <TextInput
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="JohnCena"
-                  placeholderTextColor="#92959b"
-                  style={[
-                    styles.input,
-                    compactWidth ? styles.inputCompact : undefined,
-                  ]}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  onSubmitEditing={() => {
-                    void submitUsername();
-                  }}
-                />
+              <View style={[styles.inputContainer, isFocused && styles.inputContainerFocused]}>
+                <View style={styles.inputLabelRow}>
+                  <Text style={styles.inputLabel}>USERNAME</Text>
+                  <Ionicons name="at-outline" size={14} color="#00c2ff" />
+                </View>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    value={username}
+                    onChangeText={setUsername}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    placeholder="e.g. Satoshi"
+                    placeholderTextColor="#4b5563"
+                    style={styles.input}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={() => void submitUsername()}
+                  />
+                  {username.length > 0 && (
+                    <Pressable onPress={() => setUsername("")}>
+                      <Ionicons name="close-circle" size={20} color="#4b5563" />
+                    </Pressable>
+                  )}
+                </View>
               </View>
 
               {status ? <Text style={styles.statusText}>{status}</Text> : null}
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            </View>
+            </Animated.View>
 
             <View style={styles.ctaContainer}>
               <OnboardingCta
-                label="Go Ahead"
+                label="Continue"
                 onPress={submitUsername}
-                disabled={submitting}
+                disabled={submitting || !username.trim()}
                 variant="green"
               />
             </View>
@@ -187,70 +180,92 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "space-between",
+    paddingTop: 40,
   },
   centeredContent: {
     alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 26,
-  },
-  ctaContainer: {
-    paddingHorizontal: 0,
-    paddingBottom: 80,
-    paddingTop: 24,
+    gap: 32,
   },
   stepBadge: {
-    minHeight: 50,
-    minWidth: 170,
-    paddingHorizontal: 22,
-    borderRadius: 25,
-    backgroundColor: ONBOARDING_COLORS.softGray,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   stepText: {
-    color: "#2e2f33",
-    fontSize: 20,
-    fontWeight: "700",
+    color: "#64748b",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
   },
-  stepBadgeCompact: {
-    minHeight: 46,
-    minWidth: 158,
-  },
-  stepTextCompact: {
-    fontSize: 18,
+  headerText: {
+    alignItems: "center",
+    gap: 8,
   },
   title: {
-    color: "#06070a",
-    fontWeight: "800",
+    color: "#1c1f24",
+    fontSize: 40,
+    lineHeight: 46,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
   },
-  inputWrap: {
+  subtitle: {
+    color: "#64748b",
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+    paddingHorizontal: 40,
+  },
+  inputContainer: {
     width: "100%",
-    minHeight: 86,
-    borderRadius: 22,
+    backgroundColor: "#f8fafc",
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: ONBOARDING_COLORS.inputBorder,
-    backgroundColor: "#f5f5f5",
+    borderColor: "#e2e8f0",
+  },
+  inputContainerFocused: {
+    borderColor: "#1c1f24",
+    backgroundColor: "#ffffff",
+  },
+  inputLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 18,
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  inputLabel: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 1,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   input: {
     flex: 1,
-    color: ONBOARDING_COLORS.textPrimary,
-    fontSize: 42 / 2,
-    fontWeight: "500",
-  },
-  inputCompact: {
-    fontSize: 19,
+    color: "#1c1f24",
+    fontSize: 24,
+    fontFamily: "Inter_600SemiBold",
+    padding: 0,
   },
   statusText: {
-    color: ONBOARDING_COLORS.textSecondary,
-    fontSize: 13,
+    color: "#10b981",
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
   },
   errorText: {
-    color: "#bd3f3f",
-    fontSize: 13,
+    color: "#ef4444",
+    fontSize: 14,
     textAlign: "center",
+    fontFamily: "Inter_500Medium",
+  },
+  ctaContainer: {
+    paddingBottom: 40,
   },
 });

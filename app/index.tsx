@@ -54,7 +54,7 @@ export default function AppEntry() {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color={ONBOARDING_COLORS.greenDark} />
-        <Text style={styles.loadingText}>Loading Starkbet...</Text>
+        <Text style={styles.loadingText}>Loading Zen...</Text>
       </View>
     );
   }

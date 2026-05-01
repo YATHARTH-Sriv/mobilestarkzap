@@ -80,41 +80,82 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: ONBOARDING_COLORS.greenDark,
+        tabBarActiveTintColor: '#1c1f24',
         tabBarInactiveTintColor: '#9a9ca1',
         tabBarStyle: {
-          backgroundColor: '#f4f4f4',
-          borderTopColor: '#dfdfdf',
-          borderTopWidth: 1,
-          height: hp(72),
-          paddingTop: hp(10),
-          paddingBottom: hp(10),
+          backgroundColor: '#ffffff',
+          borderTopWidth: 0,
+          height: 70,
+          paddingBottom: 12,
+          paddingTop: 12,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: ms(11),
+          fontFamily: 'Inter_500Medium',
+          marginTop: hp(4),
+        },
         headerShown: false,
-        tabBarButton: HapticTab,
+        tabBarButton: (props) => (
+          <HapticTab 
+            {...props} 
+            style={[
+              props.style, 
+              { 
+                justifyContent: 'center', 
+                alignItems: 'center',
+              }
+            ]} 
+          />
+        ),
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <Ionicons size={ms(24)} name="home-outline" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="chats"
-        options={{
-          title: 'Chats',
-          tabBarIcon: ({ color }) => (
-            <Ionicons size={ms(24)} name="chatbubbles-outline" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconContainer, focused && styles.activeTabPill]}>
+              <Ionicons size={ms(22)} name={focused ? "home" : "home-outline"} color={color} />
+            </View>
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="predict"
+        options={{
+          title: 'Predict',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconContainer, focused && styles.activeTabPill]}>
+              <Ionicons size={ms(22)} name={focused ? "trending-up" : "trending-up-outline"} color={color} />
+            </View>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="defi"
+        options={{
+          title: 'DeFi',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconContainer, focused && styles.activeTabPill]}>
+              <Ionicons size={ms(22)} name={focused ? "wallet" : "wallet-outline"} color={color} />
+            </View>
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <Ionicons size={ms(24)} name="person-outline" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconContainer, focused && styles.activeTabPill]}>
+              <Ionicons size={ms(22)} name={focused ? "person" : "person-outline"} color={color} />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
@@ -133,5 +174,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: ONBOARDING_COLORS.background,
+  },
+  tabIconContainer: {
+    width: ms(48),
+    height: ms(32),
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: ms(16),
+  },
+  activeTabPill: {
+    backgroundColor: '#f3f4f6',
   },
 });
