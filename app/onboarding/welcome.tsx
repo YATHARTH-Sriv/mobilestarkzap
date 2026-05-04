@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { usePrivy } from "@privy-io/expo";
-import { useLogin } from "@privy-io/expo/ui";
+import { usePrivy, useLogin } from "@/lib/use-auth";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View, useWindowDimensions } from "react-native";

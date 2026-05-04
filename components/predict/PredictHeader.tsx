@@ -81,12 +81,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: ms(20),
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
     color: "#1c1f24",
   },
   headerSubtitle: {
-    fontSize: ms(12),
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
     color: "#6b7280",
     marginTop: 2,

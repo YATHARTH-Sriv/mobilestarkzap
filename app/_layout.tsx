@@ -4,11 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 import { useFonts } from 'expo-font';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_900Black } from '@expo-google-fonts/inter';
-import { PrivyProvider } from '@privy-io/expo';
-import { PrivyElements } from '@privy-io/expo/ui';
 import 'react-native-reanimated';
 
-import { PRIVY_APP_ID, PRIVY_CLIENT_ID } from '@/lib/config';
+import { AuthProvider } from '@/lib/auth-provider';
+import { PRIVY_APP_ID } from '@/lib/config';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -35,15 +34,14 @@ export default function RootLayout() {
   }
 
   return (
-    <PrivyProvider appId={PRIVY_APP_ID} clientId={PRIVY_CLIENT_ID || undefined}>
+    <AuthProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
-      <PrivyElements />
       <StatusBar style="auto" />
-    </PrivyProvider>
+    </AuthProvider>
   );
 }
 

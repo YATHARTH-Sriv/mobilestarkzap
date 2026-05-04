@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, RefreshControl, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { usePrivy } from '@privy-io/expo';
+import { usePrivy } from '@/lib/use-auth';
 import { Ionicons } from '@expo/vector-icons';
 import { ms } from '@/lib/responsive';
 import { getMarketDetail, placeBet, resolveMarket, claimWinnings, type MarketDetail } from '@/lib/api/prediction';

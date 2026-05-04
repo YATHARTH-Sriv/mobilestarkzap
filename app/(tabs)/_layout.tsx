@@ -2,7 +2,7 @@ import { Tabs, Redirect } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { usePrivy } from '@privy-io/expo';
+import { usePrivy } from '@/lib/use-auth';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { fetchMyProfile } from '@/lib/profile';
@@ -85,18 +85,14 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopWidth: 0,
-          height: 70,
-          paddingBottom: 12,
-          paddingTop: 12,
+          height: 56,
+          paddingBottom: 8,
+          paddingTop: 8,
           elevation: 0,
           shadowOpacity: 0,
         },
-        tabBarShowLabel: true,
-        tabBarLabelStyle: {
-          fontSize: ms(11),
-          fontFamily: 'Inter_500Medium',
-          marginTop: hp(4),
-        },
+        tabBarShowLabel: false,
+
         headerShown: false,
         tabBarButton: (props) => (
           <HapticTab 
@@ -176,13 +172,14 @@ const styles = StyleSheet.create({
     backgroundColor: ONBOARDING_COLORS.background,
   },
   tabIconContainer: {
-    width: ms(48),
-    height: ms(32),
+    width: 40,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: ms(16),
+    borderRadius: 14,
   },
   activeTabPill: {
     backgroundColor: '#f3f4f6',
   },
 });
+

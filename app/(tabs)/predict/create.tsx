@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { usePrivy } from '@privy-io/expo';
+import { usePrivy } from '@/lib/use-auth';
 import { ms } from '@/lib/responsive';
 import { createMarket } from '@/lib/api/prediction';
 import { Toast } from '@/components/SharedComponents';

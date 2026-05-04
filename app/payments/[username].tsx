@@ -1,6 +1,6 @@
 import { hp, ms, wp } from "@/lib/responsive";
 import { Ionicons } from "@expo/vector-icons";
-import { usePrivy } from "@privy-io/expo";
+import { usePrivy } from "@/lib/use-auth";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {

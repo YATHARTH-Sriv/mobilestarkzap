@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
-import { usePrivy } from '@privy-io/expo';
+import { usePrivy } from '@/lib/use-auth';
 
 import { fetchMyProfile, type ProfileMeResponse } from '@/lib/profile';
 import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';

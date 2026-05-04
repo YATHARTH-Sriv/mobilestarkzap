@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { usePrivy } from "@privy-io/expo";
+import { usePrivy } from "@/lib/use-auth";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {

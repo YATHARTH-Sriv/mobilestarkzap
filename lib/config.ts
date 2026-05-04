@@ -15,4 +15,5 @@ function toWsUrl(httpUrl: string): string {
 export const WS_BASE_URL = process.env.EXPO_PUBLIC_WS_BASE_URL ?? toWsUrl(API_BASE_URL);
 
 export const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID ?? "";
-export const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID ?? "";
+export const PRIVY_MOBILE_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_MOBILE_CLIENT_ID ?? "";
+export const PRIVY_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_WEB_CLIENT_ID ?? "";
