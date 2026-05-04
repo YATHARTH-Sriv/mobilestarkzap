@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, RefreshControl, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, RefreshControl, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { usePrivy } from '@/lib/use-auth';
@@ -272,6 +272,9 @@ const styles = StyleSheet.create({
   detailContent: {
     padding: 20,
     gap: 20,
+    maxWidth: 600,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   marketHeaderCard: {
     backgroundColor: "#fff",
@@ -367,6 +370,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_500Medium",
     color: "#1c1f24",
+    minHeight: 44,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   betActions: {
     flexDirection: "row",

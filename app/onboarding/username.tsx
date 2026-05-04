@@ -147,7 +147,9 @@ export default function UsernameScreen() {
                     onSubmitEditing={() => void submitUsername()}
                   />
                   {username.length > 0 && (
-                    <Pressable onPress={() => setUsername("")}>
+                    <Pressable onPress={() => setUsername("")}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
                       <Ionicons name="close-circle" size={20} color="#4b5563" />
                     </Pressable>
                   )}
@@ -181,10 +183,13 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "space-between",
     paddingTop: 40,
+    alignItems: "center",
   },
   centeredContent: {
     alignItems: "center",
     gap: 32,
+    width: "100%",
+    maxWidth: 480,
   },
   stepBadge: {
     paddingHorizontal: 16,
@@ -220,6 +225,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     width: "100%",
+    maxWidth: 480,
     backgroundColor: "#f8fafc",
     borderRadius: 20,
     padding: 16,
@@ -252,7 +258,10 @@ const styles = StyleSheet.create({
     color: "#1c1f24",
     fontSize: 24,
     fontFamily: "Inter_600SemiBold",
-    padding: 0,
+    minHeight: 44,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   statusText: {
     color: "#10b981",
@@ -267,5 +276,7 @@ const styles = StyleSheet.create({
   },
   ctaContainer: {
     paddingBottom: 40,
+    width: "100%",
+    maxWidth: 480,
   },
 });

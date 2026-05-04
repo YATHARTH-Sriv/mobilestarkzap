@@ -60,6 +60,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     zIndex: 2,
+    maxWidth: 540,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   footer: {
     paddingHorizontal: 24,

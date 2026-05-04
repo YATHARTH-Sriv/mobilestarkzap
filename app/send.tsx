@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -143,6 +144,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
+    maxWidth: 600,
+    alignSelf: "center",
+    width: "100%",
   },
   backButton: {
     width: 40,
@@ -160,6 +164,9 @@ const styles = StyleSheet.create({
   searchContainer: {
     paddingHorizontal: 20,
     paddingVertical: 12,
+    maxWidth: 600,
+    alignSelf: "center",
+    width: "100%",
   },
   searchInputWrap: {
     flexDirection: "row",
@@ -175,10 +182,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1c1f24",
     fontFamily: "Inter_500Medium",
+    minHeight: 44,
+    paddingVertical: 8,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 8,
+    maxWidth: 600,
+    alignSelf: "center",
+    width: "100%",
   },
   userRow: {
     flexDirection: "row",

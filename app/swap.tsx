@@ -482,6 +482,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 132,
+    maxWidth: 600,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   hero: {
     marginBottom: 22,
@@ -537,7 +540,9 @@ const styles = StyleSheet.create({
     fontSize: 38,
     color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
-    padding: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   receivePlaceholder: {
     color: "#d1d5db",
@@ -715,6 +720,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderTopWidth: 1,
     borderTopColor: "#f3f4f6",
+    alignItems: "center" as const,
   },
   footerError: {
     flexDirection: "row",

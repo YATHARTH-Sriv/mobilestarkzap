@@ -375,6 +375,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 24,
+    maxWidth: 600,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   emptyState: {
     flex: 1,
@@ -472,6 +475,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    maxWidth: 600,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   inputContainer: {
     flex: 1,
@@ -488,6 +494,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1c1f24",
     fontFamily: "Inter_600SemiBold",
+    minHeight: 44,
+    paddingVertical: 8,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   currencyTag: {
     fontSize: 14,

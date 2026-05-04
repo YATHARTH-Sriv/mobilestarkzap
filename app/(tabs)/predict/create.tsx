@@ -103,6 +103,9 @@ const styles = StyleSheet.create({
   formView: {
     flex: 1,
     padding: 20,
+    maxWidth: 600,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   formCard: {
     backgroundColor: "#fff",
@@ -143,6 +146,9 @@ const styles = StyleSheet.create({
     color: "#1c1f24",
     minHeight: 60,
     textAlignVertical: "top",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   inputLabel: {
     fontSize: 14,

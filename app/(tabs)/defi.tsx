@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -422,6 +423,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 120,
+    maxWidth: 600,
+    alignSelf: "center" as const,
+    width: "100%" as unknown as number,
   },
   header: {
     flexDirection: "row",
@@ -640,10 +644,12 @@ const styles = StyleSheet.create({
   amountInput: {
     flex: 1,
     minHeight: 52,
-    padding: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     color: "#1c1f24",
     fontSize: 34,
     fontFamily: "Inter_600SemiBold",
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as any } : {}),
   },
   maxPill: {
     paddingHorizontal: 13,
