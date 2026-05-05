@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export function SpinningRefreshIcon({ isRefreshing, size = 20, color = "#1c1f24" }: { isRefreshing: boolean; size?: number; color?: string }) {
+export function SpinningRefreshIcon({ isRefreshing, size = 20, color = "#1c1f24", iconName = "refresh" }: { isRefreshing: boolean; size?: number; color?: string; iconName?: React.ComponentProps<typeof Ionicons>["name"] }) {
   const spinValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function SpinningRefreshIcon({ isRefreshing, size = 20, color = "#1c1f24"
 
   return (
     <Animated.View style={{ transform: [{ rotate: spin }] }}>
-      <Ionicons name="refresh" size={size} color={color} />
+      <Ionicons name={iconName as any} size={size} color={color} />
     </Animated.View>
   );
 }

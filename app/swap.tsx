@@ -57,6 +57,12 @@ const TOKEN_META: Record<
 
 const SLIPPAGE_OPTIONS = [50, 100, 200] as const;
 
+const PROVIDER_OPTIONS = [
+  { id: "auto", label: "Auto" },
+  { id: "avnu", label: "AVNU" },
+  { id: "ekubo", label: "Ekubo" },
+] as const;
+
 function cleanAmountInput(value: string): string {
   const normalized = value.replace(/,/g, ".").replace(/[^\d.]/g, "");
   const parts = normalized.split(".");
@@ -104,6 +110,7 @@ export default function SwapScreen() {
   const [tokenOut, setTokenOut] = useState<SwapTokenSymbol>("USDC");
   const [amount, setAmount] = useState("");
   const [slippageBps, setSlippageBps] = useState<(typeof SLIPPAGE_OPTIONS)[number]>(50);
+  const [provider, setProvider] = useState<(typeof PROVIDER_OPTIONS)[number]["id"]>("auto");
   const [quote, setQuote] = useState<SwapQuoteResponse | null>(null);
   const [result, setResult] = useState<SwapExecuteResponse | null>(null);
   const [loadingBalances, setLoadingBalances] = useState(true);
@@ -175,6 +182,7 @@ export default function SwapScreen() {
           tokenOut,
           amount: trimmedAmount,
           slippageBps,
+          provider: provider === "auto" ? undefined : provider,
         });
         if (!cancelled) {
           setQuote(nextQuote);
@@ -195,7 +203,7 @@ export default function SwapScreen() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [amount, getAccessToken, insufficientBalance, numericAmount, slippageBps, tokenIn, tokenOut]);
+  }, [amount, getAccessToken, insufficientBalance, numericAmount, slippageBps, provider, tokenIn, tokenOut]);
 
   function onSwitchTokens() {
     setTokenIn(tokenOut);
@@ -241,6 +249,7 @@ export default function SwapScreen() {
         tokenOut,
         amount: amount.trim(),
         slippageBps,
+        provider: provider === "auto" ? undefined : provider,
       });
       setResult(nextResult);
       setQuote(nextResult);
@@ -367,6 +376,26 @@ export default function SwapScreen() {
                   >
                     <Text style={[styles.slippageText, active && styles.slippageTextActive]}>
                       {formatBps(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.slippageRow}>
+            <Text style={styles.slippageLabel}>Provider</Text>
+            <View style={styles.slippageOptions}>
+              {PROVIDER_OPTIONS.map((option) => {
+                const active = option.id === provider;
+                return (
+                  <Pressable
+                    key={option.id}
+                    style={[styles.slippagePill, active && styles.slippagePillActive]}
+                    onPress={() => setProvider(option.id)}
+                  >
+                    <Text style={[styles.slippageText, active && styles.slippageTextActive]}>
+                      {option.label}
                     </Text>
                   </Pressable>
                 );

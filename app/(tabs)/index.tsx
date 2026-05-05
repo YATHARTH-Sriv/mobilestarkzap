@@ -22,7 +22,7 @@ import {
   type PredictionBalanceResponse,
 } from "@/lib/profile";
 import { fetchRecentPaymentContacts, type RecentPaymentContact } from "@/lib/payments";
-import { Toast } from "@/components/SharedComponents";
+import { SpinningRefreshIcon, Toast } from "@/components/SharedComponents";
 
 const FALLBACK_USERNAME = "User";
 
@@ -111,8 +111,8 @@ export default function HomeScreen() {
             <Text style={styles.usernameText}>{username}</Text>
           </View>
           <View style={styles.headerActions}>
-            <Pressable style={styles.iconButton} onPress={onRefresh}>
-              <Ionicons name="refresh-outline" size={20} color="#1c1f24" />
+            <Pressable style={styles.iconButton} onPress={onRefresh} disabled={refreshing}>
+              <SpinningRefreshIcon isRefreshing={refreshing} size={20} color="#1c1f24" iconName="refresh-outline" />
             </Pressable>
             <Pressable style={styles.walletSelector}>
               <Text style={styles.walletText}>Wallet 1</Text>
