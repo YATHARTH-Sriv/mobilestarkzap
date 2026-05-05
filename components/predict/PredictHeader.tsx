@@ -3,16 +3,18 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ms } from '@/lib/responsive';
+import { SpinningRefreshIcon } from '@/components/SharedComponents';
 
 interface PredictHeaderProps {
   title: string;
   subtitle: string;
   showBack?: boolean;
+  refreshing?: boolean;
   onRefresh?: () => void;
   onBack?: () => void;
 }
 
-export function PredictHeader({ title, subtitle, showBack, onRefresh, onBack }: PredictHeaderProps) {
+export function PredictHeader({ title, subtitle, showBack, refreshing = false, onRefresh, onBack }: PredictHeaderProps) {
   const router = useRouter();
 
   const handleBack = () => {
@@ -47,8 +49,9 @@ export function PredictHeader({ title, subtitle, showBack, onRefresh, onBack }: 
           onPress={onRefresh} 
           style={styles.refreshBtn}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          disabled={refreshing}
         >
-          <Ionicons name="refresh" size={20} color="#1c1f24" />
+          <SpinningRefreshIcon isRefreshing={refreshing} size={20} color="#1c1f24" />
         </Pressable>
       )}
     </View>

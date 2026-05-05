@@ -29,13 +29,24 @@ export default function CategoriesScreen() {
   // Responsive card width: 2 columns with 16px padding + 12px gap
   const cardWidth = Math.floor((Math.min(width, 500) - 44) / 2);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+      showToast("Refreshed");
+    }, 1000);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar style="dark" />
       <PredictHeader 
         title="PolyMarket" 
         subtitle="Prediction Markets" 
-        onRefresh={() => showToast("Refreshed")} 
+        refreshing={refreshing}
+        onRefresh={handleRefresh} 
       />
       
       <View style={styles.categoryGrid}>

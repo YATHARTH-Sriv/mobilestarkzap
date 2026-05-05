@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { FadeInView, SpinningRefreshIcon, Toast } from "@/components/SharedComponents";
 import {
   fetchMyPredictionBalances,
   formatWeiToStrk,
@@ -213,7 +214,19 @@ export default function SwapScreen() {
   }
 
   function setMaxAmount() {
-    setAmount(inputBalance > 0 ? String(Number(inputBalance.toFixed(tokenIn === "USDC" ? 6 : 8))) : "");
+    if (inputBalance <= 0) {
+      setAmount("");
+      return;
+    }
+    // Reserve a small amount for gas if swapping the native token (STRK)
+    const GAS_RESERVE = tokenIn === "STRK" ? 0.05 : 0;
+    const maxSwappable = Math.max(0, inputBalance - GAS_RESERVE);
+    
+    if (maxSwappable <= 0) {
+      setAmount("");
+    } else {
+      setAmount(String(Number(maxSwappable.toFixed(tokenIn === "USDC" ? 6 : 8))));
+    }
   }
 
   async function onSwap() {
@@ -274,12 +287,8 @@ export default function SwapScreen() {
             <Ionicons name="chevron-back" size={24} color="#1c1f24" />
           </Pressable>
           <Text style={styles.headerTitle}>Swap</Text>
-          <Pressable style={styles.backButton} onPress={loadBalances}>
-            {loadingBalances ? (
-              <ActivityIndicator size="small" color="#1c1f24" />
-            ) : (
-              <Ionicons name="refresh" size={20} color="#1c1f24" />
-            )}
+          <Pressable style={styles.backButton} onPress={loadBalances} disabled={loadingBalances}>
+            <SpinningRefreshIcon isRefreshing={loadingBalances} size={20} color="#1c1f24" />
           </Pressable>
         </View>
 

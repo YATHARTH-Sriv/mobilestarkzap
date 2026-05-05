@@ -18,7 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 import { shortenAddress } from "@/lib/http";
-import { Toast } from "@/components/SharedComponents";
+import { SpinningRefreshIcon, Toast } from "@/components/SharedComponents";
 import {
   fetchMyPredictionBalances,
   fetchMyProfile,
@@ -164,8 +164,8 @@ export default function ProfileScreen() {
             <Text style={styles.title}>Account</Text>
           </View>
           <View style={styles.headerRightActions}>
-            <Pressable style={styles.refreshIcon} onPress={refreshProfileData}>
-              <Ionicons name="refresh" size={20} color="#1c1f24" />
+            <Pressable style={styles.refreshIcon} onPress={refreshProfileData} disabled={refreshing}>
+              <SpinningRefreshIcon isRefreshing={refreshing} size={20} color="#1c1f24" />
             </Pressable>
             <Pressable style={styles.logoutIcon} onPress={logout}>
               <Ionicons name="log-out-outline" size={20} color="#ef4444" />

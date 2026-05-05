@@ -28,7 +28,7 @@ import {
   type DefiStakingSummary,
 } from "@/lib/defi";
 import { shortenAddress } from "@/lib/http";
-import { Toast } from "@/components/SharedComponents";
+import { SpinningRefreshIcon, Toast } from "@/components/SharedComponents";
 
 type Mode = "deposit" | "withdraw";
 
@@ -209,8 +209,8 @@ export default function DefiScreen() {
               {/* <Text style={styles.eyebrow}>DeFi vault</Text> */}
               <Text style={styles.title}>Earn on STRK</Text>
             </View>
-            <Pressable style={styles.refreshButton} onPress={() => void loadSummary(true)}>
-              {refreshing ? <ActivityIndicator size="small" color="#1c1f24" /> : <Ionicons name="refresh" size={20} color="#1c1f24" />}
+            <Pressable style={styles.refreshButton} onPress={() => void loadSummary(true)} disabled={refreshing}>
+              <SpinningRefreshIcon isRefreshing={refreshing} size={20} color="#1c1f24" />
             </Pressable>
           </View>
 
