@@ -20,6 +20,7 @@ import {
 import { OnboardingCta } from "@/components/onboarding-cta";
 import { OnboardingFrame } from "@/components/onboarding-frame";
 import { fetchMyProfile, setMyUsername } from "@/lib/profile";
+import { formatErrorMessage } from "@/lib/http";
 
 export default function UsernameScreen() {
   const { user, getAccessToken } = usePrivy();
@@ -96,7 +97,7 @@ export default function UsernameScreen() {
       setStatus("Username saved");
       router.replace("./wallet");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save username");
+      setError(formatErrorMessage(saveError, "Failed to save username"));
       setStatus("");
     } finally {
       setSubmitting(false);

@@ -4,6 +4,7 @@ import { Redirect } from 'expo-router';
 import { usePrivy } from '@/lib/use-auth';
 
 import { fetchMyProfile, type ProfileMeResponse } from '@/lib/profile';
+import { formatErrorMessage } from '@/lib/http';
 import { ONBOARDING_COLORS } from '@/lib/onboarding-theme';
 
 export default function AppEntry() {
@@ -33,8 +34,7 @@ export default function AppEntry() {
         }
       } catch (error) {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Failed to load profile';
-          setLoadError(message);
+          setLoadError(formatErrorMessage(error, 'Failed to load profile'));
         }
       } finally {
         if (!cancelled) {

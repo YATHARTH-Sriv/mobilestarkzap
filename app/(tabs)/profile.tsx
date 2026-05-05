@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-import { shortenAddress } from "@/lib/http";
+import { shortenAddress, formatErrorMessage } from "@/lib/http";
 import { SpinningRefreshIcon, Toast } from "@/components/SharedComponents";
 import {
   fetchMyPredictionBalances,
@@ -114,7 +114,7 @@ export default function ProfileScreen() {
       setBalances(nextBalances);
       setTransactions(nextTransactions.transactions);
     } catch (loadError) {
-      showToast(loadError instanceof Error ? loadError.message : "Failed to load profile");
+      showToast(formatErrorMessage(loadError, "Failed to load profile"));
     } finally {
       if (showLoader) setLoading(false);
     }

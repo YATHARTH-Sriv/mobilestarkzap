@@ -27,7 +27,7 @@ import {
   type DefiActionResponse,
   type DefiStakingSummary,
 } from "@/lib/defi";
-import { shortenAddress } from "@/lib/http";
+import { shortenAddress, formatErrorMessage } from "@/lib/http";
 import { SpinningRefreshIcon, Toast } from "@/components/SharedComponents";
 
 type Mode = "deposit" | "withdraw";
@@ -100,7 +100,7 @@ export default function DefiScreen() {
         useNativeDriver: true,
       }).start();
     } catch (loadError) {
-      showToast(loadError instanceof Error ? loadError.message : "Failed to load DeFi");
+      showToast(formatErrorMessage(loadError, "Failed to load DeFi"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -145,7 +145,7 @@ export default function DefiScreen() {
       setAmount("");
       await loadSummary(true);
     } catch (actionError) {
-      showToast(actionError instanceof Error ? actionError.message : "Staking action failed");
+      showToast(formatErrorMessage(actionError, "Staking action failed"));
     } finally {
       setSubmitting(false);
     }
@@ -162,7 +162,7 @@ export default function DefiScreen() {
       setLastAction(action);
       await loadSummary(true);
     } catch (claimError) {
-      showToast(claimError instanceof Error ? claimError.message : "Claim failed");
+      showToast(formatErrorMessage(claimError, "Claim failed"));
     } finally {
       setClaiming(false);
     }
@@ -179,7 +179,7 @@ export default function DefiScreen() {
       setLastAction(action);
       await loadSummary(true);
     } catch (exitError) {
-      showToast(exitError instanceof Error ? exitError.message : "Withdrawal completion failed");
+      showToast(formatErrorMessage(exitError, "Withdrawal completion failed"));
     } finally {
       setCompletingExit(false);
     }

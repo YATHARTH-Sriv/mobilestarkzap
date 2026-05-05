@@ -8,6 +8,7 @@ import { ms } from '@/lib/responsive';
 import { getMarketDetail, placeBet, resolveMarket, claimWinnings, type MarketDetail } from '@/lib/api/prediction';
 import { formatWeiToStrk } from '@/lib/profile';
 import { FadeInView, Toast } from '@/components/SharedComponents';
+import { formatErrorMessage } from '@/lib/http';
 import { PredictHeader } from '@/components/predict/PredictHeader';
 
 export default function MarketDetailScreen() {
@@ -49,7 +50,7 @@ export default function MarketDetailScreen() {
         
         setMarketDetail(detail);
       } catch (e) {
-        if (!silent) showToast(e instanceof Error ? e.message : "Failed to load market");
+        if (!silent) showToast(formatErrorMessage(e, "Failed to load market"));
       } finally {
         if (!silent) setLoading(false);
       }
@@ -78,7 +79,7 @@ export default function MarketDetailScreen() {
       setBetAmount("");
       await loadMarketDetail(true);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to place bet");
+      showToast(formatErrorMessage(e, "Failed to place bet"));
     } finally {
       setLoading(false);
     }
@@ -92,7 +93,7 @@ export default function MarketDetailScreen() {
       showToast("Market Resolved!");
       await loadMarketDetail(true);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to resolve");
+      showToast(formatErrorMessage(e, "Failed to resolve"));
     } finally {
       setLoading(false);
     }
@@ -106,7 +107,7 @@ export default function MarketDetailScreen() {
       showToast("Winnings Claimed!");
       await loadMarketDetail(true);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to claim");
+      showToast(formatErrorMessage(e, "Failed to claim"));
     } finally {
       setLoading(false);
     }

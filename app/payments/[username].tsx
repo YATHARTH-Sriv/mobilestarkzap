@@ -20,7 +20,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-import { shortenAddress } from "@/lib/http";
+import { shortenAddress, formatErrorMessage } from "@/lib/http";
 import {
   fetchPaymentHistory,
   sendDirectPayment,
@@ -161,9 +161,7 @@ export default function PaymentHistoryScreen() {
       setAmountInput("");
       await loadHistory(false);
     } catch (sendError) {
-      const message =
-        sendError instanceof Error ? sendError.message : "Payment failed";
-      setError(message);
+      setError(formatErrorMessage(sendError, "Payment failed"));
     } finally {
       setSending(false);
     }

@@ -24,6 +24,7 @@ import {
   formatWeiToUsdc,
   type PredictionBalanceResponse,
 } from "@/lib/profile";
+import { formatErrorMessage } from "@/lib/http";
 import {
   executeSwap,
   fetchSwapQuote,
@@ -136,7 +137,7 @@ export default function SwapScreen() {
     try {
       setBalances(await fetchMyPredictionBalances(getAccessToken));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load balances");
+      setError(formatErrorMessage(loadError, "Failed to load balances"));
     } finally {
       setLoadingBalances(false);
     }
@@ -190,7 +191,7 @@ export default function SwapScreen() {
       } catch (quoteError) {
         if (!cancelled) {
           setQuote(null);
-          setError(quoteError instanceof Error ? quoteError.message : "Quote failed");
+          setError(formatErrorMessage(quoteError, "Quote failed"));
         }
       } finally {
         if (!cancelled) {
@@ -261,7 +262,7 @@ export default function SwapScreen() {
       }).start();
       await loadBalances();
     } catch (swapError) {
-      setError(swapError instanceof Error ? swapError.message : "Swap failed");
+      setError(formatErrorMessage(swapError, "Swap failed"));
     } finally {
       setSwapping(false);
     }

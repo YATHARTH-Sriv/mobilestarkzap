@@ -6,6 +6,7 @@ import { usePrivy } from '@/lib/use-auth';
 import { ms } from '@/lib/responsive';
 import { createMarket } from '@/lib/api/prediction';
 import { Toast } from '@/components/SharedComponents';
+import { formatErrorMessage } from '@/lib/http';
 import { PredictHeader } from '@/components/predict/PredictHeader';
 
 const DEADLINES = [
@@ -39,7 +40,7 @@ export default function CreateMarketScreen() {
       // In native navigation, we might want to go back or to the detail
       router.replace(`/predict/${newId}`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to create market");
+      showToast(formatErrorMessage(e, "Failed to create market"));
     } finally {
       setLoading(false);
     }
