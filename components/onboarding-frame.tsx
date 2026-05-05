@@ -10,7 +10,7 @@ export function OnboardingFrame({ children, footer }: OnboardingFrameProps) {
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <View style={styles.shell}>
-        <View style={styles.bgGlowContainer}>
+        <View style={styles.bgGlowContainer} pointerEvents="none">
           <View style={[styles.glow, styles.glowTopLeft]} />
           <View style={[styles.glow, styles.glowBottomRight]} />
         </View>
